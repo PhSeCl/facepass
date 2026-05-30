@@ -1,0 +1,42 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+.venv/
+
+# Model weights
+*.onnx
+*.pth
+*.pt
+*.h5
+*.pkl
+*.caffemodel
+model/
+weights/
+scripts/model/*
+!scripts/model/.gitkeep
+
+# Dataset images
+dataset/registered/**/*.jpg
+dataset/registered/**/*.jpeg
+dataset/registered/**/*.png
+dataset/test/images/**/*.jpg
+dataset/test/images/**/*.jpeg
+dataset/test/images/**/*.png
+
+# IDE settings
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs
+*.log
+logs/
