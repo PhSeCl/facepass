@@ -51,6 +51,7 @@ Thumbs.db
 *.log
 logs/
 reports/
+config.toml
 
 # Local audit notes
 docs/architecture_audit.md
