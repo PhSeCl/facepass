@@ -6,17 +6,27 @@ __pycache__/
 # Virtual environment
 .venv/
 
-# Model weights
+# Model weights and generated galleries
+models/
+data/
 *.onnx
 *.pth
 *.pt
 *.h5
 *.pkl
+*.npy
+*.npz
 *.caffemodel
 model/
 weights/
 scripts/model/*
 !scripts/model/.gitkeep
+
+!data/
+!data/registered/
+!data/registered/.gitkeep
+!data/test/
+!data/test/.gitkeep
 
 # Dataset images
 dataset/registered/**/*.jpg
@@ -40,3 +50,6 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# Local audit notes
+docs/architecture_audit.md
