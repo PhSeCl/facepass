@@ -50,6 +50,7 @@ Thumbs.db
 # Logs
 *.log
 logs/
+reports/
 
 # Local audit notes
 docs/architecture_audit.md
