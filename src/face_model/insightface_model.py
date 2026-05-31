@@ -1,3 +1,6 @@
+import importlib
+from pathlib import Path
+
 import cv2
 import numpy as np
 
@@ -5,6 +8,7 @@ from src.common.errors import InvalidImageError
 from src.common.logging import get_logger
 
 from .base import FaceModel
+from . import model_config
 from .schemas import DetectedFace
 
 
@@ -26,24 +30,52 @@ def _l2_normalize(embedding: np.ndarray) -> np.ndarray:
     return vector / norm
 
 
+def _create_face_analysis_app(
+    model_path: Path,
+    model_name: str,
+    providers: list[str] | None,
+):
+    face_analysis_module = importlib.import_module("insightface.app.face_analysis")
+    original_ensure_available = face_analysis_module.ensure_available
+    face_analysis_module.ensure_available = lambda sub_dir, name, root="~/.insightface": str(model_path)
+    try:
+        return face_analysis_module.FaceAnalysis(
+            name=model_name,
+            root=str(model_path),
+            providers=providers or ["CPUExecutionProvider"],
+        )
+    finally:
+        face_analysis_module.ensure_available = original_ensure_available
+
+
 class InsightFaceModel(FaceModel):
     def __init__(
         self,
         model_name: str = "buffalo_l",
         providers: list[str] | None = None,
         det_size: tuple[int, int] = (640, 640),
+        model_path: str | Path | None = None,
+        gui_model_path: str | Path | None = None,
     ) -> None:
+        explicit_model_path = model_path is not None or gui_model_path is not None
         try:
-            from insightface.app import FaceAnalysis
+            resolved_model_path = model_config.resolve_model_path(
+                cli_path=model_path,
+                gui_path=gui_model_path,
+            )
+            validated_model_path = model_config.validate_model_path(resolved_model_path)
 
-            self.app = FaceAnalysis(
-                name=model_name,
-                providers=providers or ["CPUExecutionProvider"],
+            self.app = _create_face_analysis_app(
+                model_path=validated_model_path,
+                model_name=model_name,
+                providers=providers,
             )
             self.app.prepare(ctx_id=0, det_size=det_size)
             self.recognition_model = next(
                 model for model in self.app.models.values() if hasattr(model, "get_feat")
             )
+            if explicit_model_path:
+                model_config.persist_path(validated_model_path)
         except Exception as exc:
             logger.error("模型加载失败: %s", exc)
             raise

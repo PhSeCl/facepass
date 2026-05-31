@@ -11,7 +11,7 @@ def create_model(name: str = "insightface", **kwargs) -> FaceModel:
     if normalized_name == "fake":
         from .fake_model import FakeFaceModel
 
-        return FakeFaceModel(**kwargs)
+        return FakeFaceModel()
     raise ValueError(f"Unsupported face model: {name}")
 
 

@@ -1,4 +1,5 @@
 import csv
+import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -7,7 +8,14 @@ from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from src.common.errors import EmptyGalleryError, FatalStartupError, InvalidImageError
+from src.common.errors import (
+    EmptyGalleryError,
+    FatalStartupError,
+    InvalidImageError,
+    ModelIncompleteError,
+    ModelNotFoundError,
+    ModelPathMissingError,
+)
 from src.common.images import safe_load_image
 from src.common.logging import get_logger
 from src.face_model import create_model
@@ -19,6 +27,7 @@ from .schemas import ErrorResponse, IdentitiesResponse, IdentitySummary, Recogni
 
 
 logger = get_logger(__name__)
+MODEL_PATH_ENV_VAR = "FACEPASS_MODEL_PATH"
 _recognizer: Recognizer | None = None
 _gallery: Gallery = Gallery()
 _id2name: dict[str, str] = {}
@@ -33,11 +42,33 @@ def load_identities(path: Path | None = None) -> dict[str, str]:
         return {row["identity_id"]: row["name"] for row in csv.DictReader(handle)}
 
 
-def startup(fail_fast: bool = True) -> None:
+def _startup_failure_message(exc: Exception) -> str:
+    if isinstance(exc, ModelPathMissingError):
+        return "后端启动失败: 缺少模型路径。请使用 --model-path 指定 buffalo_l 目录，或在 config.toml 中设置 [model].path。"
+    if isinstance(exc, ModelNotFoundError):
+        return f"后端启动失败: 模型路径无效。{exc}。请检查 --model-path 或 config.toml 是否指向现有的 buffalo_l 目录。"
+    if isinstance(exc, ModelIncompleteError):
+        return f"后端启动失败: 模型目录不完整。{exc}。请检查 buffalo_l 目录中的 ONNX 文件是否齐全且非空。"
+    return f"后端启动失败: {exc}"
+
+
+def startup(
+    fail_fast: bool = True,
+    cli_model_path: str | Path | None = None,
+    gui_model_path: str | Path | None = None,
+) -> None:
     global _recognizer, _gallery, _id2name
     _id2name = load_identities(settings.identities_csv)
+    if cli_model_path is None:
+        cli_model_path = os.environ.get(MODEL_PATH_ENV_VAR)
     try:
-        model = create_model(settings.model_name)
+        model_kwargs = {}
+        if settings.model_name.lower() == "insightface":
+            model_kwargs = {
+                "model_path": cli_model_path,
+                "gui_model_path": gui_model_path,
+            }
+        model = create_model(settings.model_name, **model_kwargs)
         if settings.gallery_path.exists():
             _gallery = Gallery.load(settings.gallery_path)
         else:
@@ -46,8 +77,14 @@ def startup(fail_fast: bool = True) -> None:
             _gallery.save(settings.gallery_path)
         _recognizer = Recognizer(model, _gallery, settings.threshold, _id2name)
         logger.info("后端初始化完成")
+    except (ModelPathMissingError, ModelNotFoundError, ModelIncompleteError) as exc:
+        message = _startup_failure_message(exc)
+        logger.error("%s", message)
+        if fail_fast:
+            sys.exit(1)
+        raise FatalStartupError(message) from exc
     except (EmptyGalleryError, OSError, RuntimeError, ImportError) as exc:
-        message = f"后端启动失败: {exc}"
+        message = _startup_failure_message(exc)
         logger.error("%s。请检查模型权重、注册集目录和配置。", message)
         if fail_fast:
             sys.exit(1)
