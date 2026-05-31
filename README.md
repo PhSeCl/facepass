@@ -16,11 +16,15 @@ src/
 |-- backend/             # 后端：Gallery、Recognizer、FastAPI API、配置
 `-- frontend/            # 前端：Gradio 界面，仅通过 HTTP 调后端
 scripts/
-`-- run_dev.py           # 可选的一键开发启动脚本
+|-- run_dev.py           # 可选的一键开发启动脚本
+|-- eval_self.py         # 单脸裁剪口径评测脚本
+|-- analyze_threshold.py # 注册集相似度分布与阈值分析
+`-- eval_end2end.py      # 多脸端到端评测与出图
 data/
 |-- registered/          # p01..p20 注册照目录，本地放置，不进 git
 `-- test/                # 测试图片，本地放置，不进 git
-models/                 # gallery.pkl 等本地产物，不进 git
+models/                  # gallery.pkl 等本地产物，不进 git
+reports/                 # 评测 JSON / PNG 输出，本地产物，不进 git
 tests/                  # 接口、边界和错误路径测试
 ```
 
@@ -36,7 +40,7 @@ uv sync
 
 ## 运行
 
-运行 `insightface` 模型前，需要你自己准备本地 `buffalo_l` 目录。项目不会再自动下载或托管模型文件。
+运行 `insightface` 模型前，需要你自己准备本地 `buffalo_l` 目录。项目不会再自动下载或托管模型文件。当前适配器按“`buffalo_l` 模型目录本身”加载，不是传 `models_cache` 根目录。
 
 ```powershell
 # 1. 准备本地 buffalo_l 模型目录，例如：
@@ -55,14 +59,31 @@ uv run uvicorn src.backend.api:app --port 8000
 uv run python src/frontend/app.py
 ```
 
-如果路径校验通过，显式传入的模型目录会被写入项目根的 `config.toml`：
+如果路径校验通过，显式传入的模型目录会被写入项目根的 `config.toml`。TOML 里建议使用正斜杠：
 
 ```toml
 [model]
-path = "F:\\InsightFace\\models_cache\\models\\buffalo_l"
+path = "F:/InsightFace/models_cache/models/buffalo_l"
+
+[recognition]
+threshold = 0.30
+```
+
+也可以参考并复制仓库里的 [`config.example.toml`](/F:/facepass/config.example.toml)：
+
+```toml
+[model]
+# Fill this with the buffalo_l model directory itself, not the models cache root.
+path = "models/buffalo_l"
+
+[recognition]
+# Placeholder default. Replace this with a threshold chosen from real evaluation reports.
+threshold = 0.30
 ```
 
 后续未显式传 `--model-path` 时，后端会按 `CLI > GUI > config.toml` 的优先级解析模型路径。
+
+当前 `InsightFaceModel` 默认显式使用 `CPUExecutionProvider`，因此在没有 CUDA 版 `onnxruntime` 的机器上也能按 CPU 跑通。
 
 健康检查：
 
@@ -83,6 +104,66 @@ curl http://127.0.0.1:8000/health
 - `name`: 显示名，unknown 时为 `null`
 - `similarity`: 相似度
 - `is_unknown`: 是否为 unknown
+
+## 数据与评测
+
+自采测试集标注沿用 JSONL，一行一张图：
+
+```json
+{"image_path":"images/group_01.jpg","faces":[{"identity_id":"p01","bbox":[12,34,80,80]},{"identity_id":"unknown","bbox":[120,40,76,76]}]}
+```
+
+其中 `bbox` 固定为 `[x, y, w, h]`。目前仓库内有三类相关入口：
+
+- `scripts/eval_self.py`：复用标注框裁剪后的单脸口径，适合先看识别本身是否区分开。
+- `scripts/eval_end2end.py`：复用真实 `Recognizer.recognize_image()` 整图链路，做“检测框 ↔ 标注框 IoU 贪心配对 + 端到端 top-1”评测。
+- `scripts/analyze_threshold.py`：只看注册集内部相似度分布，用来给 unknown 阈值找候选值。
+
+单脸评测：
+
+```powershell
+uv run python scripts/eval_self.py `
+  --annotations-path data/test/annotations.jsonl `
+  --test-root data/test `
+  --registered-root data/registered `
+  --model-name insightface `
+  --threshold 0.30
+```
+
+阈值分析：
+
+```powershell
+uv run python scripts/analyze_threshold.py `
+  --registered-root data/registered `
+  --model-name insightface `
+  --histogram-path reports/threshold_hist.png
+```
+
+多脸端到端评测：
+
+```powershell
+uv run python scripts/eval_end2end.py `
+  --annotations-path data/test/annotations.jsonl `
+  --test-root data/test `
+  --registered-root data/registered `
+  --model-name insightface `
+  --threshold 0.30
+```
+
+`eval_end2end.py` 会输出：
+
+- `reports/end2end_eval.json`
+- `reports/end2end_confusion_matrix.png`
+- `reports/end2end_detection.png`
+- `reports/end2end_accuracy.png`
+
+端到端评测的指标口径：
+
+- 检测层：`detection_recall`、`detection_precision`、`false_positives`
+- 识别层：严格 `strict_top1_accuracy` 与宽松 `matched_top1_accuracy`
+- `unknown`：标注为 unknown 的检出准确率，以及系统判成 unknown 的精确率
+
+如果本机还没有准备 `data/test` 标注或 `data/registered` 注册集，`eval_end2end.py` 会打印提示并直接退出，不会抛异常。
 
 ## 错误处理
 
@@ -123,6 +204,7 @@ uv run pytest tests -q
 - `with_retry` 只重试瞬时异常，不重试 `ValueError`。
 - 前端后端不可达时返回友好提示。
 - `FakeFaceModel` 可在不下载权重的情况下完整跑通建库和 `/recognize` HTTP 流程。
+- 多脸端到端评测的 IoU 配对、严格/宽松 top-1、unknown 指标、漏检/误检日志与 bench 脚本产图。
 - 后端不导入具体模型实现，前端不导入任何 `src.*` 内部模块。
 
 ## 待填项
