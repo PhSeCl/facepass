@@ -1,14 +1,29 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+
+from src.face_model import model_config
 
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
+DEFAULT_THRESHOLD = 0.30
+
+
+def _load_threshold() -> float:
+    data = model_config.load_config_data()
+    recognition_section = data.get("recognition")
+    if not isinstance(recognition_section, dict):
+        return DEFAULT_THRESHOLD
+
+    threshold = recognition_section.get("threshold")
+    if isinstance(threshold, (int, float)):
+        return float(threshold)
+    return DEFAULT_THRESHOLD
 
 
 @dataclass(frozen=True)
 class Settings:
     model_name: str = "insightface"
-    threshold: float = 0.30
+    threshold: float = field(default_factory=_load_threshold)
     gallery_path: Path = ROOT_DIR / "models" / "gallery.pkl"
     registered_dir: Path = ROOT_DIR / "data" / "registered"
     identities_csv: Path = ROOT_DIR / "dataset" / "identities.csv"
@@ -17,6 +32,5 @@ class Settings:
 
 settings = Settings()
 
-# The default threshold is only for running the minimal closed loop. The final
-# threshold should be chosen from registered-set similarity distributions, never
-# tuned on the held-out test set.
+# TODO: replace the default threshold with a value chosen from real evaluation
+# reports once registration/test data collection is complete.

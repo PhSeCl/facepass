@@ -56,6 +56,12 @@ def _load_config_data() -> dict[str, Any]:
     return {}
 
 
+def load_config_data() -> dict[str, Any]:
+    """Load raw project config data from config.toml using the shared TOML loader."""
+
+    return _load_config_data()
+
+
 def load_persisted_path() -> Path | None:
     """Load the persisted absolute model path from the project-root config file."""
 

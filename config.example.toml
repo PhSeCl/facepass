@@ -2,3 +2,8 @@
 # Fill this with the buffalo_l model directory itself, not the models cache root.
 # Example relative placeholder:
 path = "models/buffalo_l"
+
+[recognition]
+# Placeholder default. Replace this with a threshold chosen from real evaluation
+# reports after data collection/labeling is complete.
+threshold = 0.30
