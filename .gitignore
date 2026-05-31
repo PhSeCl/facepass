@@ -19,22 +19,12 @@ data/
 *.caffemodel
 model/
 weights/
-scripts/model/*
-!scripts/model/.gitkeep
 
 !data/
 !data/registered/
 !data/registered/.gitkeep
 !data/test/
 !data/test/.gitkeep
-
-# Dataset images
-dataset/registered/**/*.jpg
-dataset/registered/**/*.jpeg
-dataset/registered/**/*.png
-dataset/test/images/**/*.jpg
-dataset/test/images/**/*.jpeg
-dataset/test/images/**/*.png
 
 # IDE settings
 .vscode/
