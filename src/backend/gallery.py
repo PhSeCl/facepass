@@ -21,6 +21,11 @@ def _normalize(embedding: np.ndarray) -> np.ndarray:
     return vector / norm
 
 
+def _bbox_area(bbox: tuple[int, int, int, int]) -> int:
+    _, _, width, height = bbox
+    return max(0, int(width)) * max(0, int(height))
+
+
 class Gallery:
     def __init__(self, entries: dict[str, list[np.ndarray]] | None = None) -> None:
         self._entries: dict[str, list[np.ndarray]] = entries or {}
@@ -38,19 +43,28 @@ class Gallery:
 
         empty_identities: list[str] = []
         for identity_dir in sorted(path for path in root_path.iterdir() if path.is_dir()):
-            before = len(self._entries.get(identity_dir.name, []))
+            identity_embeddings: list[np.ndarray] = []
             for image_path in sorted(identity_dir.rglob("*")):
                 if image_path.suffix.lower() not in IMAGE_EXTENSIONS:
                     continue
                 try:
                     image = safe_load_image(image_path)
-                    embedding = model.encode_aligned(image)
-                    self.register(identity_dir.name, [embedding])
+                    detected_faces = model.detect_and_encode(image)
+                    if not detected_faces:
+                        logger.warning("跳过未检测到人脸的注册图 %s", image_path)
+                        continue
+                    if len(detected_faces) > 1:
+                        logger.warning("注册图 %s 检测到多张人脸，将使用面积最大的一张", image_path)
+                    selected_face = max(detected_faces, key=lambda face: _bbox_area(face.bbox))
+                    identity_embeddings.append(selected_face.embedding)
                 except (InvalidImageError, OSError, ValueError) as exc:
                     logger.warning("跳过无效注册图 %s: %s", image_path, exc)
-            after = len(self._entries.get(identity_dir.name, []))
-            if after == before:
+            if not identity_embeddings:
                 empty_identities.append(identity_dir.name)
+                continue
+
+            averaged_embedding = np.mean(np.stack(identity_embeddings, axis=0), axis=0)
+            self.register(identity_dir.name, [averaged_embedding])
 
         if empty_identities:
             logger.warning("以下身份没有有效注册图: %s", ", ".join(empty_identities))

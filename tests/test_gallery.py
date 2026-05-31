@@ -4,6 +4,7 @@ from PIL import Image
 
 from src.common.errors import EmptyGalleryError
 from src.backend.gallery import Gallery
+from src.face_model.schemas import DetectedFace
 
 
 def unit(values: list[float]) -> np.ndarray:
@@ -47,7 +48,59 @@ class FakeBuildModel:
         return unit([1, 0, 0])
 
     def detect_and_encode(self, image: np.ndarray):
-        return []
+        height, width = image.shape[:2]
+        return [
+            DetectedFace(
+                bbox=(0, 0, int(width), int(height)),
+                embedding=unit([1, 0, 0]),
+                det_score=1.0,
+                landmarks=None,
+            )
+        ]
+
+
+class FakeDetectBuildModel:
+    def encode_aligned(self, face_image: np.ndarray) -> np.ndarray:
+        raise AssertionError("build_from_dir should use detect_and_encode for registration images")
+
+    def detect_and_encode(self, image: np.ndarray):
+        signature = tuple(int(value) for value in image[0, 0, :3])
+        if signature == (0, 0, 255):  # red image after BGR conversion
+            return [
+                DetectedFace(
+                    bbox=(0, 0, 10, 10),
+                    embedding=unit([1, 0, 0]),
+                    det_score=1.0,
+                    landmarks=None,
+                )
+            ]
+        if signature == (0, 255, 0):  # green image
+            return [
+                DetectedFace(
+                    bbox=(0, 0, 10, 10),
+                    embedding=unit([0, 1, 0]),
+                    det_score=1.0,
+                    landmarks=None,
+                )
+            ]
+        if signature == (255, 0, 0):  # blue image
+            return [
+                DetectedFace(
+                    bbox=(0, 0, 4, 4),
+                    embedding=unit([1, 0, 0]),
+                    det_score=0.9,
+                    landmarks=None,
+                ),
+                DetectedFace(
+                    bbox=(0, 0, 8, 8),
+                    embedding=unit([0, 0, 1]),
+                    det_score=0.8,
+                    landmarks=None,
+                ),
+            ]
+        if signature == (255, 255, 255):  # white image
+            return []
+        raise AssertionError(f"unexpected test image signature: {signature}")
 
 
 def test_build_from_dir_skips_bad_images_and_registers_valid_images(tmp_path) -> None:
@@ -73,3 +126,36 @@ def test_build_from_dir_raises_when_no_valid_registration_images(tmp_path) -> No
 
     with pytest.raises(EmptyGalleryError):
         gallery.build_from_dir(str(root), FakeBuildModel())
+
+
+def test_build_from_dir_detects_faces_selects_largest_and_averages_per_identity(
+    tmp_path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    root = tmp_path / "registered"
+    identity_one = root / "p01"
+    identity_two = root / "p02"
+    identity_one.mkdir(parents=True)
+    identity_two.mkdir(parents=True)
+
+    Image.new("RGB", (8, 8), color=(255, 0, 0)).save(identity_one / "red.png")
+    Image.new("RGB", (8, 8), color=(0, 255, 0)).save(identity_one / "green.png")
+    Image.new("RGB", (8, 8), color=(0, 0, 255)).save(identity_two / "multi-face.png")
+    Image.new("RGB", (8, 8), color=(255, 255, 255)).save(identity_two / "no-face.png")
+
+    gallery = Gallery()
+    with caplog.at_level("WARNING"):
+        gallery.build_from_dir(str(root), FakeDetectBuildModel())
+
+    assert gallery.identities() == [
+        {"identity_id": "p01", "count": 1},
+        {"identity_id": "p02", "count": 1},
+    ]
+    identity_id, similarity = gallery.match(unit([1, 1, 0]))
+    assert identity_id == "p01"
+    assert similarity > 0.99
+    identity_id, similarity = gallery.match(unit([0, 0, 1]))
+    assert identity_id == "p02"
+    assert similarity > 0.99
+    assert "检测到多张人脸" in caplog.text
+    assert "未检测到人脸" in caplog.text
