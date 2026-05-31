@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 import src.face_model.insightface_model as insightface_model_module
+from src.common.errors import ModelLoadError
 from src.face_model.insightface_model import InsightFaceModel
 
 
@@ -103,7 +104,49 @@ def test_insightface_model_does_not_persist_explicit_path_when_loading_fails(
         lambda model_path, model_name, providers: (_ for _ in ()).throw(RuntimeError("load failed")),
     )
 
-    with pytest.raises(RuntimeError, match="load failed"):
+    with pytest.raises(ModelLoadError, match="load failed"):
         InsightFaceModel(model_path=tmp_path / "cli-model")
 
     assert persisted == []
+
+
+def test_insightface_model_wraps_runtime_load_failure_as_model_load_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    resolved_path = tmp_path / "resolved-buffalo-l"
+
+    monkeypatch.setattr(insightface_model_module.model_config, "resolve_model_path", lambda cli_path=None, gui_path=None: resolved_path)
+    monkeypatch.setattr(insightface_model_module.model_config, "validate_model_path", lambda path: resolved_path)
+    monkeypatch.setattr(
+        insightface_model_module,
+        "_create_face_analysis_app",
+        lambda model_path, model_name, providers: (_ for _ in ()).throw(RuntimeError("onnx init failed")),
+    )
+
+    with pytest.raises(ModelLoadError, match="onnx init failed"):
+        InsightFaceModel(model_path=tmp_path / "cli-model")
+
+
+def test_detect_and_encode_wraps_runtime_failure_as_model_load_error() -> None:
+    class BrokenApp:
+        def get(self, image: np.ndarray):
+            raise RuntimeError("inference exploded")
+
+    model = object.__new__(InsightFaceModel)
+    model.app = BrokenApp()
+
+    with pytest.raises(ModelLoadError, match="inference exploded"):
+        model.detect_and_encode(np.zeros((8, 8, 3), dtype=np.uint8))
+
+
+def test_encode_aligned_wraps_runtime_failure_as_model_load_error() -> None:
+    class BrokenRecognitionModel:
+        def get_feat(self, image: np.ndarray) -> np.ndarray:
+            raise RuntimeError("embedding exploded")
+
+    model = object.__new__(InsightFaceModel)
+    model.recognition_model = BrokenRecognitionModel()
+
+    with pytest.raises(ModelLoadError, match="embedding exploded"):
+        model.encode_aligned(np.zeros((8, 8, 3), dtype=np.uint8))

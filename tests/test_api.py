@@ -7,7 +7,7 @@ import io
 import pytest
 
 import src.backend.api as api
-from src.common.errors import ModelNotFoundError, ModelPathMissingError
+from src.common.errors import ModelLoadError, ModelNotFoundError, ModelPathMissingError
 
 app = api.app
 
@@ -154,3 +154,58 @@ def test_startup_exits_with_guidance_when_model_path_is_invalid(
     assert exc.value.code == 1
     assert "--model-path" in caplog.text
     assert "bad path" in caplog.text
+
+
+def test_startup_exits_with_guidance_when_model_load_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    monkeypatch.setattr(
+        api,
+        "settings",
+        SimpleNamespace(
+            model_name="insightface",
+            threshold=0.3,
+            gallery_path=tmp_path / "gallery.pkl",
+            registered_dir=tmp_path / "registered",
+            identities_csv=tmp_path / "identities.csv",
+            max_upload_bytes=1024,
+        ),
+    )
+    monkeypatch.setattr(api, "create_model", lambda name, **kwargs: (_ for _ in ()).throw(ModelLoadError("onnxruntime failed")))
+
+    with caplog.at_level(logging.ERROR), pytest.raises(SystemExit) as exc:
+        api.startup(fail_fast=True)
+
+    assert exc.value.code == 1
+    assert "损坏或不兼容" in caplog.text
+    assert "onnxruntime failed" in caplog.text
+
+
+def test_recognize_returns_readable_500_and_service_stays_alive_on_model_load_error(monkeypatch) -> None:
+    class FlakyRecognizer:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def recognize_image(self, image) -> list[dict]:
+            self.calls += 1
+            if self.calls == 1:
+                raise ModelLoadError("runtime inference failed")
+            return []
+
+    recognizer = FlakyRecognizer()
+    client = TestClient(app)
+    buffer = io.BytesIO()
+    Image.new("RGB", (2, 2), color=(255, 0, 0)).save(buffer, format="PNG")
+    payload = buffer.getvalue()
+
+    monkeypatch.setattr(api, "get_recognizer", lambda: recognizer)
+
+    first = client.post("/recognize", files={"file": ("ok.png", payload, "image/png")})
+    second = client.post("/recognize", files={"file": ("ok.png", payload, "image/png")})
+
+    assert first.status_code == 500
+    assert "runtime inference failed" in first.json()["message"]
+    assert second.status_code == 200
+    assert second.json() == []

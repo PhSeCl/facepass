@@ -4,7 +4,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from src.common.errors import InvalidImageError
+from src.common.errors import InvalidImageError, ModelConfigError, ModelLoadError
 from src.common.logging import get_logger
 
 from .base import FaceModel
@@ -48,6 +48,19 @@ def _create_face_analysis_app(
         face_analysis_module.ensure_available = original_ensure_available
 
 
+def _wrap_model_runtime_error(exc: Exception, *, action: str, model_path: Path | None = None) -> ModelLoadError:
+    if isinstance(exc, ModelLoadError):
+        return exc
+
+    message = f"模型{action}失败: {exc}"
+    if model_path is not None:
+        message = (
+            f"{message}。当前使用的持久化/默认模型路径可能已失效，请检查 config.toml，"
+            "或通过 --model-path 重新指定有效模型目录。"
+        )
+    return ModelLoadError(message)
+
+
 class InsightFaceModel(FaceModel):
     def __init__(
         self,
@@ -58,6 +71,7 @@ class InsightFaceModel(FaceModel):
         gui_model_path: str | Path | None = None,
     ) -> None:
         explicit_model_path = model_path is not None or gui_model_path is not None
+        validated_model_path: Path | None = None
         try:
             resolved_model_path = model_config.resolve_model_path(
                 cli_path=model_path,
@@ -76,15 +90,28 @@ class InsightFaceModel(FaceModel):
             )
             if explicit_model_path:
                 model_config.persist_path(validated_model_path)
-        except Exception as exc:
+        except ModelConfigError as exc:
             logger.error("模型加载失败: %s", exc)
             raise
+        except Exception as exc:
+            wrapped = _wrap_model_runtime_error(
+                exc,
+                action="加载",
+                model_path=None if explicit_model_path else validated_model_path,
+            )
+            logger.error("%s", wrapped)
+            raise wrapped from exc
 
     def detect_and_encode(self, image: np.ndarray) -> list[DetectedFace]:
         _ensure_valid_image(image)
         if image.shape[2] == 4:
             image = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
-        faces = self.app.get(image)
+        try:
+            faces = self.app.get(image)
+        except Exception as exc:
+            wrapped = _wrap_model_runtime_error(exc, action="推理")
+            logger.error("%s", wrapped)
+            raise wrapped from exc
         if not faces:
             logger.info("未检测到人脸")
             return []
@@ -106,4 +133,10 @@ class InsightFaceModel(FaceModel):
 
     def encode_aligned(self, face_image: np.ndarray) -> np.ndarray:
         _ensure_valid_image(face_image)
-        return _l2_normalize(self.recognition_model.get_feat(face_image).flatten())
+        try:
+            embedding = self.recognition_model.get_feat(face_image).flatten()
+        except Exception as exc:
+            wrapped = _wrap_model_runtime_error(exc, action="推理")
+            logger.error("%s", wrapped)
+            raise wrapped from exc
+        return _l2_normalize(embedding)

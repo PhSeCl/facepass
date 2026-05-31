@@ -13,6 +13,7 @@ from src.common.errors import (
     FatalStartupError,
     InvalidImageError,
     ModelIncompleteError,
+    ModelLoadError,
     ModelNotFoundError,
     ModelPathMissingError,
 )
@@ -49,6 +50,8 @@ def _startup_failure_message(exc: Exception) -> str:
         return f"后端启动失败: 模型路径无效。{exc}。请检查 --model-path 或 config.toml 是否指向现有的 buffalo_l 目录。"
     if isinstance(exc, ModelIncompleteError):
         return f"后端启动失败: 模型目录不完整。{exc}。请检查 buffalo_l 目录中的 ONNX 文件是否齐全且非空。"
+    if isinstance(exc, ModelLoadError):
+        return f"后端启动失败: 模型文件可能损坏或不兼容。{exc}。请检查路径下的模型文件，必要时重新获取模型。"
     return f"后端启动失败: {exc}"
 
 
@@ -77,7 +80,7 @@ def startup(
             _gallery.save(settings.gallery_path)
         _recognizer = Recognizer(model, _gallery, settings.threshold, _id2name)
         logger.info("后端初始化完成")
-    except (ModelPathMissingError, ModelNotFoundError, ModelIncompleteError) as exc:
+    except (ModelPathMissingError, ModelNotFoundError, ModelIncompleteError, ModelLoadError) as exc:
         message = _startup_failure_message(exc)
         logger.error("%s", message)
         if fail_fast:
@@ -98,6 +101,12 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="FacePass API", lifespan=lifespan)
+
+
+@app.exception_handler(ModelLoadError)
+async def model_load_exception_handler(request: Request, exc: ModelLoadError) -> JSONResponse:
+    logger.error("模型运行失败 %s %s: %s", request.method, request.url.path, exc)
+    return JSONResponse(status_code=500, content={"message": str(exc)})
 
 
 @app.exception_handler(Exception)
