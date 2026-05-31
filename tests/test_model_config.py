@@ -70,3 +70,63 @@ def test_persist_path_updates_model_path_without_losing_other_config(
     contents = config_file.read_text(encoding="utf-8")
     assert 'name = "facepass"' in contents
     assert model_config.load_persisted_path() == (tmp_path / "new-model").resolve()
+
+
+def test_resolve_model_path_prefers_cli_over_gui_and_persisted(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_file = tmp_path / "config.toml"
+    config_file.write_text('[model]\npath = "/persisted/model"\n', encoding="utf-8")
+    monkeypatch.setattr(model_config, "CONFIG_FILE", config_file)
+
+    resolved = model_config.resolve_model_path(
+        cli_path=tmp_path / "cli-model",
+        gui_path=tmp_path / "gui-model",
+    )
+
+    assert resolved == (tmp_path / "cli-model").resolve()
+
+
+def test_resolve_model_path_uses_gui_when_cli_missing(tmp_path: Path) -> None:
+    resolved = model_config.resolve_model_path(
+        cli_path=None,
+        gui_path=tmp_path / "gui-model",
+    )
+
+    assert resolved == (tmp_path / "gui-model").resolve()
+
+
+def test_resolve_model_path_uses_persisted_path_when_no_explicit_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_file = tmp_path / "config.toml"
+    persisted = tmp_path / "persisted-model"
+    config_file.write_text(f'[model]\npath = "{persisted.as_posix()}"\n', encoding="utf-8")
+    monkeypatch.setattr(model_config, "CONFIG_FILE", config_file)
+
+    resolved = model_config.resolve_model_path()
+
+    assert resolved == persisted.resolve()
+
+
+def test_resolve_model_path_raises_when_no_source_available(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(model_config, "CONFIG_FILE", tmp_path / "config.toml")
+
+    with pytest.raises(ModelPathMissingError):
+        model_config.resolve_model_path()
+
+
+def test_resolve_model_path_resolves_relative_paths_from_project_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(model_config, "_project_root", lambda: tmp_path)
+
+    resolved = model_config.resolve_model_path(cli_path=Path("models/buffalo_l"))
+
+    assert resolved == (tmp_path / "models" / "buffalo_l").resolve()

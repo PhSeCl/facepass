@@ -5,6 +5,7 @@ from typing import Any
 
 import tomli_w
 
+from src.common.errors import ModelPathMissingError
 from src.common.logging import get_logger
 
 try:
@@ -21,6 +22,13 @@ def _project_root() -> Path:
 
 
 CONFIG_FILE = _project_root() / "config.toml"
+
+
+def _normalize_path(path: str | Path) -> Path:
+    candidate = Path(path).expanduser()
+    if not candidate.is_absolute():
+        candidate = _project_root() / candidate
+    return candidate.resolve()
 
 
 def _load_config_data() -> dict[str, Any]:
@@ -53,7 +61,7 @@ def load_persisted_path() -> Path | None:
     if not isinstance(path_value, str) or not path_value.strip():
         return None
 
-    return Path(path_value).expanduser().resolve()
+    return _normalize_path(path_value)
 
 
 def persist_path(path: Path) -> None:
@@ -63,5 +71,25 @@ def persist_path(path: Path) -> None:
         model_section = {}
         data["model"] = model_section
 
-    model_section["path"] = str(path.expanduser().resolve())
+    model_section["path"] = str(_normalize_path(path))
     CONFIG_FILE.write_text(tomli_w.dumps(data), encoding="utf-8")
+
+
+def resolve_model_path(
+    cli_path: str | Path | None = None,
+    gui_path: str | Path | None = None,
+) -> Path:
+    """Resolve model path from CLI, GUI, then persisted config, without validating contents."""
+
+    if cli_path is not None:
+        return _normalize_path(cli_path)
+    if gui_path is not None:
+        return _normalize_path(gui_path)
+
+    persisted_path = load_persisted_path()
+    if persisted_path is not None:
+        return persisted_path
+
+    raise ModelPathMissingError(
+        "Model path is missing. Provide --model-path, pass a GUI model path, or set [model].path in config.toml."
+    )
