@@ -5,7 +5,7 @@ from typing import Any
 
 import tomli_w
 
-from src.common.errors import ModelPathMissingError
+from src.common.errors import ModelIncompleteError, ModelNotFoundError, ModelPathMissingError
 from src.common.logging import get_logger
 
 try:
@@ -22,6 +22,13 @@ def _project_root() -> Path:
 
 
 CONFIG_FILE = _project_root() / "config.toml"
+BUFFALO_L_REQUIRED_FILES = (
+    "1k3d68.onnx",
+    "2d106det.onnx",
+    "det_10g.onnx",
+    "genderage.onnx",
+    "w600k_r50.onnx",
+)
 
 
 def _normalize_path(path: str | Path) -> Path:
@@ -93,3 +100,30 @@ def resolve_model_path(
     raise ModelPathMissingError(
         "Model path is missing. Provide --model-path, pass a GUI model path, or set [model].path in config.toml."
     )
+
+
+def validate_model_path(path: str | Path) -> Path:
+    """Shallow-check a buffalo_l model directory for missing or empty ONNX files.
+
+    This only catches missing paths and empty files. It does not prove the model
+    contents are valid or runtime-compatible.
+    """
+
+    resolved_path = _normalize_path(path)
+    if not resolved_path.exists() or not resolved_path.is_dir():
+        raise ModelNotFoundError(f"Model path does not exist or is not a directory: {resolved_path}")
+
+    missing_or_empty: list[str] = []
+    for filename in BUFFALO_L_REQUIRED_FILES:
+        candidate = resolved_path / filename
+        if not candidate.exists():
+            missing_or_empty.append(filename)
+            continue
+        if candidate.stat().st_size <= 0:
+            missing_or_empty.append(filename)
+
+    if missing_or_empty:
+        joined = ", ".join(missing_or_empty)
+        raise ModelIncompleteError(f"Model directory is incomplete. Missing or empty files: {joined}")
+
+    return resolved_path

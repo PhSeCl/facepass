@@ -14,6 +14,30 @@ from src.common.errors import (
 from src.face_model import model_config
 
 
+BUFFALO_L_REQUIRED_FILES = (
+    "1k3d68.onnx",
+    "2d106det.onnx",
+    "det_10g.onnx",
+    "genderage.onnx",
+    "w600k_r50.onnx",
+)
+
+
+def _create_buffalo_l_dir(base_dir: Path, *, empty_files: set[str] | None = None, missing_files: set[str] | None = None) -> Path:
+    model_dir = base_dir / "buffalo_l"
+    model_dir.mkdir()
+    empty_files = empty_files or set()
+    missing_files = missing_files or set()
+
+    for filename in BUFFALO_L_REQUIRED_FILES:
+        if filename in missing_files:
+            continue
+        contents = b"" if filename in empty_files else b"onnx"
+        (model_dir / filename).write_bytes(contents)
+
+    return model_dir
+
+
 def test_model_config_errors_extend_expected_base_classes() -> None:
     assert issubclass(ModelConfigError, FacePassError)
     assert issubclass(ModelPathMissingError, ModelConfigError)
@@ -130,3 +154,28 @@ def test_resolve_model_path_resolves_relative_paths_from_project_root(
     resolved = model_config.resolve_model_path(cli_path=Path("models/buffalo_l"))
 
     assert resolved == (tmp_path / "models" / "buffalo_l").resolve()
+
+
+def test_validate_model_path_raises_when_path_is_missing(tmp_path: Path) -> None:
+    with pytest.raises(ModelNotFoundError):
+        model_config.validate_model_path(tmp_path / "missing-model")
+
+
+def test_validate_model_path_raises_when_required_file_is_missing(tmp_path: Path) -> None:
+    model_dir = _create_buffalo_l_dir(tmp_path, missing_files={"w600k_r50.onnx"})
+
+    with pytest.raises(ModelIncompleteError, match="w600k_r50.onnx"):
+        model_config.validate_model_path(model_dir)
+
+
+def test_validate_model_path_raises_when_required_file_is_empty(tmp_path: Path) -> None:
+    model_dir = _create_buffalo_l_dir(tmp_path, empty_files={"det_10g.onnx"})
+
+    with pytest.raises(ModelIncompleteError, match="det_10g.onnx"):
+        model_config.validate_model_path(model_dir)
+
+
+def test_validate_model_path_returns_resolved_path_for_complete_directory(tmp_path: Path) -> None:
+    model_dir = _create_buffalo_l_dir(tmp_path)
+
+    assert model_config.validate_model_path(model_dir) == model_dir.resolve()
