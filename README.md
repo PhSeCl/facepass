@@ -16,12 +16,11 @@ src/
 |-- backend/             # 后端：Gallery、Recognizer、FastAPI API、配置
 `-- frontend/            # 前端：Gradio 界面，仅通过 HTTP 调后端
 scripts/
-|-- download_models.py   # HF Hub 下载占位脚本
 `-- run_dev.py           # 可选的一键开发启动脚本
 data/
 |-- registered/          # p01..p20 注册照目录，本地放置，不进 git
 `-- test/                # 测试图片，本地放置，不进 git
-models/                 # gallery.pkl 和自托管模型文件，本地生成/下载，不进 git
+models/                 # gallery.pkl 等本地产物，不进 git
 tests/                  # 接口、边界和错误路径测试
 ```
 
@@ -37,20 +36,33 @@ uv sync
 
 ## 运行
 
-首次运行 InsightFace `buffalo_l` 会自动下载约 300MB 模型到用户目录下的 InsightFace 缓存，不会进入本仓库。
+运行 `insightface` 模型前，需要你自己准备本地 `buffalo_l` 目录。项目不会再自动下载或托管模型文件。
 
 ```powershell
-# 1. 下载项目自托管大文件。目前 HF 仓库还未创建，此脚本只会创建 models/ 并提示 TODO。
-uv run python scripts/download_models.py
-
+# 1. 准备本地 buffalo_l 模型目录，例如：
+#    F:\InsightFace\models_cache\models\buffalo_l
+#
 # 2. 准备注册集：将 p01..p20 的注册照放到 data/registered/p01/ 等目录。
 
-# 3. 启动后端
+# 3. 启动后端和前端
+uv run python scripts/run_dev.py --model-path F:\InsightFace\models_cache\models\buffalo_l
+
+# 或者只启动后端
+$env:FACEPASS_MODEL_PATH = "F:\InsightFace\models_cache\models\buffalo_l"
 uv run uvicorn src.backend.api:app --port 8000
 
-# 4. 另开终端启动前端
+# 另开终端启动前端
 uv run python src/frontend/app.py
 ```
+
+如果路径校验通过，显式传入的模型目录会被写入项目根的 `config.toml`：
+
+```toml
+[model]
+path = "F:\\InsightFace\\models_cache\\models\\buffalo_l"
+```
+
+后续未显式传 `--model-path` 时，后端会按 `CLI > GUI > config.toml` 的优先级解析模型路径。
 
 健康检查：
 
@@ -80,7 +92,7 @@ curl http://127.0.0.1:8000/health
 - 瞬时错误：前端请求后端、HF 下载等 IO/网络操作使用有限次数指数退避重试；耗尽后返回友好提示，不让前端进程退出。
 - 可恢复输入错误：坏图片、空文件、非图片、单张注册图读取失败不重试；API 返回 400/413，建库时跳过坏图并继续。
 
-## 大文件与 Hugging Face
+## 本地模型与大文件
 
 仓库不提交任何超过 50MB 的权重、构建好的身份库或大数组文件。`.gitignore` 已排除：
 
@@ -92,9 +104,7 @@ curl http://127.0.0.1:8000/health
 - `.venv/`
 - Python 缓存和日志
 
-模型下载链接：`<待填 HF 链接>`
-
-`scripts/download_models.py` 中的 `HF_REPO_ID` 目前是 `TODO_org/face-recognition-assignment-models`。后续创建 HF 仓库后，将自托管的大文件上传到该仓库，运行时下载到本地 `models/`。
+当前约定是：模型目录由使用者自行下载并放在本地任意位置，再通过 `--model-path`、`FACEPASS_MODEL_PATH` 或 `config.toml` 指定。项目本身不负责下载、不依赖 Hugging Face 托管，也不会把模型目录纳入 git。
 
 ## 测试
 
@@ -117,7 +127,6 @@ uv run pytest tests -q
 
 ## 待填项
 
-- 创建 Hugging Face 仓库并替换 `HF_REPO_ID` 与模型下载链接。
 - 收集并放置真实 `data/registered/p01` 到 `p20` 注册照。
 - 基于注册集内部相似度分布确定最终 unknown 阈值，不能用测试集调参。
 - 最终提交前按课程要求补充打包脚本和报告。

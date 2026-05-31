@@ -530,7 +530,6 @@ source = { virtual = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "gradio" },
-    { name = "huggingface-hub" },
     { name = "insightface" },
     { name = "matplotlib" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -553,7 +552,6 @@ dependencies = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.136.3" },
     { name = "gradio", specifier = ">=6.15.2" },
-    { name = "huggingface-hub", specifier = ">=1.17.0" },
     { name = "insightface", specifier = ">=1.0.1" },
     { name = "matplotlib", specifier = ">=3.10.9" },
     { name = "numpy", specifier = ">=2.2.6" },
