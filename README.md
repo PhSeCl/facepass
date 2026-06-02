@@ -219,7 +219,7 @@ Gradio 前端的“数据集演示”页现在支持两种输入：
 
 - 标注图片数：`61`
 - 标注人脸总数：`156`
-- 其中 `unknown`：`92`
+- 其中 `unknown`：`93`
 - 图片目录：`dataset/test/images`
 - 缺少标注的图片：`0`
 - 多余标注项：`0`
@@ -253,8 +253,8 @@ uv run python scripts/summarize_test_annotations.py --write-readme
 | p17 | 3 |
 | p18 | 3 |
 | p19 | 3 |
-| p20 | 4 |
-| unknown | 92 |
+| p20 | 3 |
+| unknown | 93 |
 <!-- TEST_ANNOTATION_COUNTS:END -->
 
 单脸评测：
