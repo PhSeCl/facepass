@@ -88,7 +88,13 @@ def startup(
             }
         model = create_model(settings.model_name, **model_kwargs)
         if settings.gallery_path.exists():
-            _gallery = Gallery.load(settings.gallery_path)
+            cached_gallery = Gallery.load(settings.gallery_path)
+            if getattr(cached_gallery, "requires_rebuild", False):
+                _gallery = Gallery()
+                _gallery.build_from_dir(str(settings.registered_dir), model)
+                _gallery.save(settings.gallery_path)
+            else:
+                _gallery = cached_gallery
         else:
             _gallery = Gallery()
             _gallery.build_from_dir(str(settings.registered_dir), model)
@@ -194,6 +200,8 @@ def identities() -> IdentitiesResponse:
             identity_id=item["identity_id"],
             name=_id2name.get(str(item["identity_id"])),
             count=int(item["count"]),
+            prototype_count=int(item["prototype_count"]),
+            valid_image_count=int(item["valid_image_count"]),
         )
         for item in _gallery.identities()
     ]

@@ -37,7 +37,14 @@ def test_save_and_load_preserve_registered_embeddings(tmp_path) -> None:
     gallery.save(path)
     loaded = Gallery.load(path)
 
-    assert loaded.identities() == [{"identity_id": "p01", "count": 1}]
+    assert loaded.identities() == [
+        {
+            "identity_id": "p01",
+            "count": 1,
+            "prototype_count": 1,
+            "valid_image_count": 1,
+        }
+    ]
     identity_id, similarity = loaded.match(unit([1, 0, 0]))
     assert identity_id == "p01"
     assert similarity == 1.0
@@ -113,7 +120,14 @@ def test_build_from_dir_skips_bad_images_and_registers_valid_images(tmp_path) ->
     gallery = Gallery()
     gallery.build_from_dir(str(root), FakeBuildModel())
 
-    assert gallery.identities() == [{"identity_id": "p01", "count": 1}]
+    assert gallery.identities() == [
+        {
+            "identity_id": "p01",
+            "count": 1,
+            "prototype_count": 1,
+            "valid_image_count": 1,
+        }
+    ]
 
 
 def test_build_from_dir_raises_when_no_valid_registration_images(tmp_path) -> None:
@@ -148,8 +162,18 @@ def test_build_from_dir_detects_faces_selects_largest_and_averages_per_identity(
         gallery.build_from_dir(str(root), FakeDetectBuildModel())
 
     assert gallery.identities() == [
-        {"identity_id": "p01", "count": 1},
-        {"identity_id": "p02", "count": 1},
+        {
+            "identity_id": "p01",
+            "count": 1,
+            "prototype_count": 1,
+            "valid_image_count": 2,
+        },
+        {
+            "identity_id": "p02",
+            "count": 1,
+            "prototype_count": 1,
+            "valid_image_count": 1,
+        },
     ]
     identity_id, similarity = gallery.match(unit([1, 1, 0]))
     assert identity_id == "p01"
@@ -199,8 +223,18 @@ def test_build_from_cropped_dir_uses_encode_aligned_and_averages_identity_embedd
     gallery.build_from_cropped_dir(str(root), model)
 
     assert gallery.identities() == [
-        {"identity_id": "identity_00070", "count": 1},
-        {"identity_id": "identity_00212", "count": 1},
+        {
+            "identity_id": "identity_00070",
+            "count": 1,
+            "prototype_count": 1,
+            "valid_image_count": 2,
+        },
+        {
+            "identity_id": "identity_00212",
+            "count": 1,
+            "prototype_count": 1,
+            "valid_image_count": 1,
+        },
     ]
     identity_id, similarity = gallery.match(unit([1, 0, 0]))
     assert identity_id == "identity_00070"
@@ -210,3 +244,18 @@ def test_build_from_cropped_dir_uses_encode_aligned_and_averages_identity_embedd
     assert similarity == pytest.approx(1.0)
     assert model.encode_calls == 3
     assert model.detect_calls == 0
+
+
+def test_register_supports_distinct_valid_image_count_metadata() -> None:
+    gallery = Gallery()
+
+    gallery.register("p01", [unit([1, 0, 0])], valid_image_count=3)
+
+    assert gallery.identities() == [
+        {
+            "identity_id": "p01",
+            "count": 1,
+            "prototype_count": 1,
+            "valid_image_count": 3,
+        }
+    ]

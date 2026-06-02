@@ -1,0 +1,47 @@
+name: Update Test Annotation Summary
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *"
+  push:
+    branches:
+      - main
+    paths:
+      - "dataset/test/annotation.json"
+      - "scripts/summarize_test_annotations.py"
+      - ".github/workflows/update-test-annotation-summary.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-readme-summary:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Refresh README summary block
+        run: python scripts/summarize_test_annotations.py --write-readme
+
+      - name: Commit README update when changed
+        shell: bash
+        run: |
+          if git diff --quiet -- README.md; then
+            echo "README summary unchanged"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "docs: refresh test annotation summary"
+          git push

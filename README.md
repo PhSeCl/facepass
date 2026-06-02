@@ -17,6 +17,8 @@ src/
 `-- frontend/            # 前端：Gradio 界面，仅通过 HTTP 调后端
 scripts/
 |-- run_dev.py           # 可选的一键开发启动脚本
+|-- preannotate_test.py  # 为 dataset/test/images 生成预标注草稿
+|-- summarize_test_annotations.py # 统计 test 标注人数并检查漏标/多余标注
 |-- eval_self.py         # 单脸裁剪口径评测脚本
 |-- analyze_threshold.py # 注册集相似度分布与阈值分析
 `-- eval_end2end.py      # 多脸端到端评测与出图
@@ -25,9 +27,9 @@ dataset/
 |-- registered/          # 真实注册集：p01..p20 注册照目录，已纳入版本控制
 `-- test/                # 自采测试图与标注目录，测试图已纳入版本控制
 data/
-|-- registered/          # 占位目录，仅保留 .gitkeep
-|-- test/                # 占位目录，仅保留 .gitkeep
-`-- tmp_*                # 测试 / 脚本用的临时 fixture，不是正式数据集
+|-- registered/          # 测试 / 脚本 fixture
+|-- test/                # 测试 / 脚本 fixture
+`-- tmp_*                # 临时样本，不是正式数据集根目录
 models/                  # gallery.pkl 等本地产物，不进 git
 reports/                 # 评测 JSON / PNG 输出，本地产物，不进 git
 tests/                  # 接口、边界和错误路径测试
@@ -106,8 +108,16 @@ curl http://127.0.0.1:8000/health
 ## API
 
 - `GET /health`：返回服务状态。
-- `GET /identities`：返回身份库中每个身份的注册图数量。
+- `GET /identities`：返回身份库中每个身份的原型向量数量与有效注册图数量。
 - `POST /recognize`：multipart 上传图片，返回 `RecognitionResult` 列表。
+
+`GET /identities` 当前字段：
+
+- `identity_id`
+- `name`
+- `count`：兼容字段，等于 `prototype_count`
+- `prototype_count`：当前身份实际参与检索的原型向量数
+- `valid_image_count`：通过校验并参与建库的注册图数量
 
 `RecognitionResult` 字段保持为：
 
@@ -119,30 +129,139 @@ curl http://127.0.0.1:8000/health
 
 ## 数据与评测
 
-自采测试集标注沿用 JSONL，一行一张图：
+当前仓库内 `dataset/test` 的正式标注文件是 [dataset/test/annotation.json](/F:/facepass/dataset/test/annotation.json)，格式是“按图片名分组”的 JSON 对象：
 
 ```json
-{"image_path":"images/group_01.jpg","faces":[{"identity_id":"p01","bbox":[12,34,80,80]},{"identity_id":"unknown","bbox":[120,40,76,76]}]}
+{
+  "group_01.jpg": [
+    {"bbox": [12, 34, 80, 80], "identity": "p01", "score": 0.71},
+    {"bbox": [120, 40, 76, 76], "identity": "unknown", "score": 0.08}
+  ],
+  "p01_t01.jpg": [
+    {"bbox": [220, 65, 140, 180], "identity": "p01", "score": 0.93}
+  ]
+}
 ```
 
-其中 `bbox` 固定为 `[x, y, w, h]`。
+说明：
+
+- 顶层 key 必须等于图片文件名，例如 `group_01.jpg`、`p01_t01.jpg`。
+- 每个 value 是该图里所有人脸的列表。
+- `bbox` 固定为 `[x, y, w, h]`。
+- `identity` 只能写 `p01`..`p20` 或 `unknown`。
+- `score` 是预标注阶段保留的相似度参考值；评测会忽略它，但人工核对时应该保留。
+- 现有加载器同时兼容 `.json` 和旧 `.jsonl`，但当前仓库标准是 `annotation.json`，后续不要再把 `dataset/test` 主标注写回 JSONL。
+
+### 向 `dataset/test` 添加图片的必做流程
+
+这是当前最容易出错的地方：**往 `dataset/test/images` 增加图片时，必须同步维护 `dataset/test/annotation.json`。只加图片、不加标注，后面任何人都不知道这张图是谁，也没法直接评测。**
+
+推荐流程：
+
+1. 把图片放进 [dataset/test/images](/F:/facepass/dataset/test/images)。
+   - 单人照命名为 `pXX_tNN.jpg`，例如 `p06_t02.jpg`。
+   - 合照命名为 `group_NN.jpg`。
+   - 不要提交自己都看不懂含义的文件名。
+2. 同一个提交里更新 [dataset/test/annotation.json](/F:/facepass/dataset/test/annotation.json)。
+   - 顶层 key 必须和图片文件名完全一致。
+   - 单人照也必须显式写 bbox 和 identity，不要靠文件名猜。
+   - 不确定身份就先写 `unknown`，不要为了“看起来完整”硬写某个 `pXX`。
+3. 如果是新加了一批图片，先跑一次预标注，再人工核对。
+
+```powershell
+uv run python scripts/preannotate_test.py `
+  --images-dir dataset/test/images `
+  --out dataset/test/annotation.json `
+  --registered-root dataset/registered `
+  --overwrite
+```
+
+4. 预标注只是草稿，必须人工检查后再提交。
+   - 重点看低分项、单人照多脸、多人照漏脸。
+   - 当前规则里，低于 `0.25` 的草稿身份会直接写成 `unknown`。
+5. 提交前一定跑下面这个检查。
+
+```powershell
+uv run python scripts/summarize_test_annotations.py
+```
+
+如果输出里“缺少标注的图片”或“多余标注项”不是 `0`，先修 annotation，再提交图片。
 
 目录约定需要特别说明：
 
 - `dataset/`：真实实验数据目录，当前已纳入版本控制；其中 `dataset/registered` 已准备完毕，`dataset/test` 当前主要包含测试图。
 - `data/`：仓库内测试与脚本 fixture 目录，主要放临时合成样本和 `.gitkeep`，不是正式数据集根目录。
 
+Gradio 前端的“数据集演示”页现在支持两种输入：
+
+- `ZIP`：上传较小的 `test.zip`。
+- `文件夹`：直接输入本机绝对路径，例如 `F:\datasets\my_eval`。
+
+文件夹模式不会弹系统原生资源管理器。这不是业务限制，而是纯浏览器 + Gradio 方案无法可靠暴露任意本机绝对目录路径；因此前端只把路径字符串发给后端，再由后端直接从本机磁盘读取。
+
+文件夹模式只接受两种明确布局，不再递归猜目录：
+
+- 选中的目录本身就是测试目录：目录下直接有 `images/` 与一个标注文件。
+- 选中的是数据集根目录：目录下直接有 `test/images/` 与对应标注文件。
+
 目前仓库内有三类相关入口：
 
+- `scripts/preannotate_test.py`：对 `dataset/test/images` 跑预标注，生成待人工核对的 `annotation.json` 草稿。
+- `scripts/summarize_test_annotations.py`：统计当前 test 标注里每个 `pXX` 的出现次数，并检查图片与标注是否一一对应。
 - `scripts/eval_self.py`：复用标注框裁剪后的单脸口径，适合先看识别本身是否区分开。
 - `scripts/eval_end2end.py`：复用真实 `Recognizer.recognize_image()` 整图链路，做“检测框 ↔ 标注框 IoU 贪心配对 + 端到端 top-1”评测。
 - `scripts/analyze_threshold.py`：只看注册集内部相似度分布，用来给 unknown 阈值找候选值。
+
+### 当前 `dataset/test` 标注人数统计
+
+<!-- TEST_ANNOTATION_COUNTS:START -->
+当前 [dataset/test/annotation.json](dataset/test/annotation.json) 统计如下：
+
+- 标注图片数：`61`
+- 标注人脸总数：`156`
+- 其中 `unknown`：`92`
+- 图片目录：`dataset/test/images`
+- 缺少标注的图片：`0`
+- 多余标注项：`0`
+
+可用下面的命令重新生成本节：
+
+```powershell
+uv run python scripts/summarize_test_annotations.py --write-readme
+```
+
+如果上面两项不是 `0`，先修复 `dataset/test/annotation.json`，再继续评测或提交图片。
+
+| 身份 | 标注人数 |
+| --- | ---: |
+| p01 | 3 |
+| p02 | 3 |
+| p03 | 4 |
+| p04 | 4 |
+| p05 | 3 |
+| p06 | 3 |
+| p07 | 3 |
+| p08 | 3 |
+| p09 | 3 |
+| p10 | 3 |
+| p11 | 3 |
+| p12 | 3 |
+| p13 | 3 |
+| p14 | 3 |
+| p15 | 3 |
+| p16 | 4 |
+| p17 | 3 |
+| p18 | 3 |
+| p19 | 3 |
+| p20 | 4 |
+| unknown | 92 |
+<!-- TEST_ANNOTATION_COUNTS:END -->
 
 单脸评测：
 
 ```powershell
 uv run python scripts/eval_self.py `
-  --annotations-path dataset/test/annotations.jsonl `
+  --annotations-path dataset/test/annotation.json `
   --test-root dataset/test `
   --registered-root dataset/registered `
   --model-name insightface `
@@ -162,7 +281,7 @@ uv run python scripts/analyze_threshold.py `
 
 ```powershell
 uv run python scripts/eval_end2end.py `
-  --annotations-path dataset/test/annotations.jsonl `
+  --annotations-path dataset/test/annotation.json `
   --test-root dataset/test `
   --registered-root dataset/registered `
   --model-name insightface `
@@ -211,7 +330,7 @@ uv run python scripts/eval_end2end.py `
 
 当前约定是：模型目录由使用者自行下载并放在本地任意位置，再通过 `--model-path`、`FACEPASS_MODEL_PATH` 或 `config.toml` 指定。项目本身不负责下载、不依赖 Hugging Face 托管，也不会把模型目录纳入 git。
 
-`dataset/` 与上述模型产物不同：当前仓库已经提交了 `dataset/identities.csv`、`dataset/registered/` 和部分 `dataset/test/` 图片。
+`dataset/` 与上述模型产物不同：当前仓库已经提交了 `dataset/identities.csv`、`dataset/registered/`、`dataset/test/images/` 和 `dataset/test/annotation.json`。
 
 ## 测试
 
@@ -235,7 +354,7 @@ uv run pytest tests -q
 
 ## 待填项
 
-- 补齐 `dataset/test/annotations.jsonl`，让自采评测脚本可以直接按默认参数运行。
+- 持续维护 `dataset/test/annotation.json`，确保新增图片和标注始终同步提交。
 - 基于注册集内部相似度分布确定最终 unknown 阈值，不能用测试集调参。
 - 最终提交前按课程要求补充打包脚本和报告。
 

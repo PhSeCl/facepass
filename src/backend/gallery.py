@@ -11,6 +11,7 @@ from src.face_model.base import FaceModel
 
 logger = get_logger(__name__)
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+GALLERY_FORMAT_VERSION = 2
 
 
 def _normalize(embedding: np.ndarray) -> np.ndarray:
@@ -27,14 +28,35 @@ def _bbox_area(bbox: tuple[int, int, int, int]) -> int:
 
 
 class Gallery:
-    def __init__(self, entries: dict[str, list[np.ndarray]] | None = None) -> None:
+    def __init__(
+        self,
+        entries: dict[str, list[np.ndarray]] | None = None,
+        *,
+        metadata: dict[str, dict[str, int]] | None = None,
+        requires_rebuild: bool = False,
+    ) -> None:
         self._entries: dict[str, list[np.ndarray]] = entries or {}
+        self._metadata: dict[str, dict[str, int]] = metadata or {}
+        self.requires_rebuild = requires_rebuild
 
-    def register(self, identity_id: str, embeddings: list[np.ndarray]) -> None:
+    def register(
+        self,
+        identity_id: str,
+        embeddings: list[np.ndarray],
+        *,
+        valid_image_count: int | None = None,
+    ) -> None:
         if not embeddings:
             return
+        normalized_embeddings = [_normalize(embedding) for embedding in embeddings]
         self._entries.setdefault(identity_id, [])
-        self._entries[identity_id].extend(_normalize(embedding) for embedding in embeddings)
+        self._entries[identity_id].extend(normalized_embeddings)
+        stats = self._metadata.setdefault(
+            identity_id,
+            {"prototype_count": 0, "valid_image_count": 0},
+        )
+        stats["prototype_count"] = len(self._entries[identity_id])
+        stats["valid_image_count"] += valid_image_count if valid_image_count is not None else len(normalized_embeddings)
 
     def build_from_dir(self, root: str, model: FaceModel) -> None:
         root_path = Path(root)
@@ -64,7 +86,11 @@ class Gallery:
                 continue
 
             averaged_embedding = np.mean(np.stack(identity_embeddings, axis=0), axis=0)
-            self.register(identity_dir.name, [averaged_embedding])
+            self.register(
+                identity_dir.name,
+                [averaged_embedding],
+                valid_image_count=len(identity_embeddings),
+            )
 
         if empty_identities:
             logger.warning("以下身份没有有效注册图: %s", ", ".join(empty_identities))
@@ -92,7 +118,11 @@ class Gallery:
                 continue
 
             averaged_embedding = np.mean(np.stack(identity_embeddings, axis=0), axis=0)
-            self.register(identity_dir.name, [averaged_embedding])
+            self.register(
+                identity_dir.name,
+                [averaged_embedding],
+                valid_image_count=len(identity_embeddings),
+            )
 
         if empty_identities:
             logger.warning("以下身份没有有效注册图: %s", ", ".join(empty_identities))
@@ -118,20 +148,49 @@ class Gallery:
         return best_identity, max(0.0, best_similarity)
 
     def identities(self) -> list[dict[str, int | str]]:
-        return [
-            {"identity_id": identity_id, "count": len(embeddings)}
-            for identity_id, embeddings in sorted(self._entries.items())
-        ]
+        rows: list[dict[str, int | str]] = []
+        for identity_id, embeddings in sorted(self._entries.items()):
+            stats = self._metadata.get(identity_id, {})
+            prototype_count = len(embeddings)
+            rows.append(
+                {
+                    "identity_id": identity_id,
+                    "count": prototype_count,
+                    "prototype_count": prototype_count,
+                    "valid_image_count": int(stats.get("valid_image_count", prototype_count)),
+                }
+            )
+        return rows
 
     def save(self, path: str | Path) -> None:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("wb") as handle:
-            pickle.dump(self._entries, handle)
+            pickle.dump(
+                {
+                    "version": GALLERY_FORMAT_VERSION,
+                    "entries": self._entries,
+                    "metadata": self._metadata,
+                },
+                handle,
+            )
 
     @classmethod
     def load(cls, path: str | Path) -> "Gallery":
         path = Path(path)
         with path.open("rb") as handle:
-            entries = pickle.load(handle)
-        return cls(entries=entries)
+            payload = pickle.load(handle)
+        if isinstance(payload, dict) and payload.get("version") == GALLERY_FORMAT_VERSION:
+            entries = payload.get("entries", {})
+            metadata = payload.get("metadata", {})
+            return cls(entries=entries, metadata=metadata)
+        if isinstance(payload, dict):
+            metadata = {
+                identity_id: {
+                    "prototype_count": len(embeddings),
+                    "valid_image_count": len(embeddings),
+                }
+                for identity_id, embeddings in payload.items()
+            }
+            return cls(entries=payload, metadata=metadata, requires_rebuild=True)
+        raise ValueError("gallery cache format is invalid")

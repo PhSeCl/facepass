@@ -28,6 +28,8 @@ class IdentitySummary(BaseModel):
     identity_id: str
     name: str | None = None
     count: int
+    prototype_count: int
+    valid_image_count: int
 
 
 class IdentitiesResponse(BaseModel):

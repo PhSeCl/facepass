@@ -9,6 +9,7 @@ from src.backend.dataset_import import (
     DatasetArchiveError,
     DatasetLayoutError,
     extract_dataset_archive,
+    locate_external_dataset_directory,
 )
 
 
@@ -126,3 +127,42 @@ def test_extract_dataset_archive_falls_back_to_zipfile_when_7z_is_missing(
 
     assert calls
     assert result.images_dir.exists()
+
+
+def test_locate_external_dataset_directory_accepts_selected_test_directory(tmp_path: Path) -> None:
+    test_root = tmp_path / "test"
+    (test_root / "images").mkdir(parents=True)
+    (test_root / "annotations.jsonl").write_text('{"image":"group_01.jpg","faces":[]}\n', encoding="utf-8")
+    (test_root / "registered" / "p01").mkdir(parents=True)
+
+    result = locate_external_dataset_directory(test_root)
+
+    assert result.dataset_root == test_root
+    assert result.images_dir == test_root / "images"
+    assert result.annotation_path == test_root / "annotations.jsonl"
+    assert result.registered_dir == test_root / "registered"
+
+
+def test_locate_external_dataset_directory_accepts_dataset_root_with_nested_test_directory(tmp_path: Path) -> None:
+    root = tmp_path / "dataset"
+    test_root = root / "test"
+    (test_root / "images").mkdir(parents=True)
+    (test_root / "annotation.json").write_text("{}", encoding="utf-8")
+    (root / "registered" / "p01").mkdir(parents=True)
+
+    result = locate_external_dataset_directory(root)
+
+    assert result.dataset_root == test_root
+    assert result.images_dir == test_root / "images"
+    assert result.annotation_path == test_root / "annotation.json"
+    assert result.registered_dir == root / "registered"
+
+
+def test_locate_external_dataset_directory_rejects_parent_directory_without_direct_test_layout(tmp_path: Path) -> None:
+    root = tmp_path / "datasets"
+    test_root = root / "nested" / "test"
+    (test_root / "images").mkdir(parents=True)
+    (test_root / "annotation.json").write_text("{}", encoding="utf-8")
+
+    with pytest.raises(DatasetLayoutError, match="test/"):
+        locate_external_dataset_directory(root)

@@ -1,9 +1,11 @@
 import logging
-from fastapi.testclient import TestClient
-from types import SimpleNamespace
-from PIL import Image
-import io
 import base64
+import io
+from pathlib import Path
+from types import SimpleNamespace
+
+from fastapi.testclient import TestClient
+from PIL import Image
 
 import pytest
 
@@ -23,13 +25,38 @@ def test_health_endpoint_reports_ok() -> None:
     assert response.json()["status"] == "ok"
 
 
-def test_identities_endpoint_returns_identity_counts() -> None:
+def test_identities_endpoint_returns_identity_counts(monkeypatch: pytest.MonkeyPatch) -> None:
     client = TestClient(app)
+    monkeypatch.setattr(
+        api,
+        "_gallery",
+        SimpleNamespace(
+            identities=lambda: [
+                {
+                    "identity_id": "p01",
+                    "count": 1,
+                    "prototype_count": 1,
+                    "valid_image_count": 3,
+                }
+            ]
+        ),
+    )
+    monkeypatch.setattr(api, "_id2name", {"p01": "Alice"})
 
     response = client.get("/identities")
 
     assert response.status_code == 200
-    assert "identities" in response.json()
+    assert response.json() == {
+        "identities": [
+            {
+                "identity_id": "p01",
+                "name": "Alice",
+                "count": 1,
+                "prototype_count": 1,
+                "valid_image_count": 3,
+            }
+        ]
+    }
 
 
 def test_recognize_rejects_non_image_upload_with_400() -> None:
@@ -101,6 +128,64 @@ def test_startup_passes_explicit_model_path_to_insightface_factory(monkeypatch, 
 
     assert captured["name"] == "insightface"
     assert captured["kwargs"] == {"model_path": tmp_path / "cli-buffalo-l", "gui_model_path": None}
+    assert api.get_recognizer() == "recognizer"
+
+
+def test_startup_rebuilds_gallery_when_cached_gallery_lacks_valid_image_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    gallery_path = tmp_path / "gallery.pkl"
+    gallery_path.write_bytes(b"placeholder")
+    identities_csv = tmp_path / "identities.csv"
+    identities_csv.write_text("identity_id,name\n", encoding="utf-8")
+    registered_dir = tmp_path / "registered"
+    model = object()
+    build_calls: list[tuple[str, object]] = []
+    save_calls: list[Path] = []
+
+    class LegacyGallery:
+        requires_rebuild = True
+
+    legacy_gallery = LegacyGallery()
+
+    class RebuiltGallery:
+        requires_rebuild = False
+
+        def build_from_dir(self, root: str, model_arg: object) -> None:
+            build_calls.append((root, model_arg))
+
+        def save(self, path: Path) -> None:
+            save_calls.append(path)
+
+        @staticmethod
+        def load(path: Path) -> LegacyGallery:
+            return legacy_gallery
+
+    monkeypatch.setattr(
+        api,
+        "settings",
+        SimpleNamespace(
+            model_name="insightface",
+            threshold=0.3,
+            gallery_path=gallery_path,
+            registered_dir=registered_dir,
+            identities_csv=identities_csv,
+            max_upload_bytes=1024,
+        ),
+    )
+    monkeypatch.setattr(api, "create_model", lambda name, **kwargs: model)
+    monkeypatch.setattr(api, "Gallery", RebuiltGallery)
+    monkeypatch.setattr(api, "Recognizer", lambda model, gallery, threshold, id2name: "recognizer")
+    monkeypatch.setattr(api, "_recognizer", None)
+    monkeypatch.setattr(api, "_gallery", api.Gallery())
+    monkeypatch.setattr(api, "_id2name", {})
+
+    api.startup(fail_fast=False, cli_model_path=tmp_path / "cli-buffalo-l")
+
+    assert build_calls == [(str(registered_dir), model)]
+    assert save_calls == [gallery_path]
+    assert isinstance(api._gallery, RebuiltGallery)
     assert api.get_recognizer() == "recognizer"
 
 

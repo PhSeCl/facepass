@@ -1,13 +1,12 @@
 import requests
 import pytest
 from PIL import Image
-from pathlib import Path
 
 from src.frontend.app import (
-    DATASET_BROWSER_ROOT,
     DATASET_EVAL_TIMEOUT,
     demo,
     inspect_dataset_via_backend,
+    load_identities,
     _post_dataset_eval_directory,
     _post_dataset_eval,
     _post_dataset_inspect_directory,
@@ -69,6 +68,19 @@ def test_frontend_inspects_dataset_directory_and_shows_gallery_choice(monkeypatc
 
     assert has_registered is True
     assert "文件夹内含" in message
+
+
+def test_frontend_directory_mode_requires_existing_directory(tmp_path) -> None:
+    missing_dir = tmp_path / "missing"
+
+    has_registered, message = inspect_dataset_via_backend(
+        str(missing_dir),
+        source_mode="directory",
+        backend_url="http://127.0.0.1:8000",
+    )
+
+    assert has_registered is False
+    assert message == "请输入存在的数据集目录路径"
 
 
 def test_frontend_evaluates_dataset_and_decodes_plot_images(monkeypatch, tmp_path) -> None:
@@ -235,33 +247,49 @@ def test_frontend_dataset_directory_inspect_posts_dataset_dir(monkeypatch, tmp_p
     assert observed["timeout"] == 5
 
 
-def test_frontend_directory_browser_defaults_to_workspace_root() -> None:
-    assert DATASET_BROWSER_ROOT == str(Path.cwd())
+def test_frontend_identity_library_uses_valid_image_count(monkeypatch) -> None:
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {
+                "identities": [
+                    {
+                        "identity_id": "p01",
+                        "name": "Alice",
+                        "count": 1,
+                        "prototype_count": 1,
+                        "valid_image_count": 3,
+                    }
+                ]
+            }
+
+    monkeypatch.setattr("src.frontend.app.requests.get", lambda *args, **kwargs: FakeResponse())
+
+    assert load_identities(backend_url="http://127.0.0.1:8000") == [["p01", "Alice", 3]]
 
 
-def test_frontend_directory_browser_is_visible_without_source_toggle() -> None:
+def test_frontend_directory_tab_uses_path_textbox_instead_of_fileexplorer() -> None:
     components = {component["id"]: component for component in demo.config["components"]}
-    directory_component = next(
+    textbox_component = next(
         component
         for component in components.values()
-        if component["type"] == "fileexplorer"
-        and component["props"].get("label") == "选择数据集文件夹"
+        if component["type"] == "textbox"
+        and component["props"].get("label") == "数据集目录路径"
     )
 
-    assert directory_component["props"]["visible"] is True
-    assert not any(
-        component["type"] == "radio" and component["props"].get("label") == "输入来源"
-        for component in components.values()
-    )
+    assert textbox_component["props"]["visible"] is True
+    assert not any(component["type"] == "fileexplorer" for component in components.values())
 
 
-def test_frontend_directory_browser_does_not_auto_inspect_on_change() -> None:
+def test_frontend_directory_path_input_does_not_auto_inspect_on_change() -> None:
     components = {component["id"]: component for component in demo.config["components"]}
     directory_component_id = next(
         component_id
         for component_id, component in components.items()
-        if component["type"] == "fileexplorer"
-        and component["props"].get("label") == "选择数据集文件夹"
+        if component["type"] == "textbox"
+        and component["props"].get("label") == "数据集目录路径"
     )
 
     assert all(

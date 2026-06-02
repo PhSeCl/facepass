@@ -136,6 +136,39 @@ def _find_registered_dir(candidate_root: Path, search_root: Path) -> Path | None
     return None
 
 
+def _find_direct_registered_dir(root: Path) -> Path | None:
+    for directory_name in REGISTERED_DIR_NAMES:
+        candidate = root / directory_name
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
+def _match_local_dataset_root(selected_root: Path, candidate_root: Path) -> LocalDatasetDirectory | None:
+    images_dir = candidate_root / "images"
+    if not images_dir.is_dir():
+        return None
+    annotation_paths = [
+        candidate_root / filename
+        for filename in ANNOTATION_FILENAMES
+        if (candidate_root / filename).is_file()
+    ]
+    if not annotation_paths:
+        return None
+    if len(annotation_paths) > 1:
+        names = ", ".join(path.name for path in annotation_paths)
+        raise DatasetLayoutError(f"检测到多个标注文件: {names}")
+    annotation_path = annotation_paths[0]
+    return LocalDatasetDirectory(
+        selected_root=selected_root,
+        dataset_root=candidate_root,
+        images_dir=images_dir,
+        annotation_path=annotation_path,
+        annotation_format=annotation_path.suffix.lstrip("."),
+        registered_dir=_find_direct_registered_dir(selected_root),
+    )
+
+
 def _locate_dataset_root(extracted_root: Path) -> ExtractedDatasetArchive:
     candidates: list[ExtractedDatasetArchive] = []
     search_roots = [extracted_root, *sorted((path for path in extracted_root.rglob("*") if path.is_dir()), key=lambda p: len(p.parts))]
@@ -205,15 +238,14 @@ def locate_external_dataset_directory(root: str | Path) -> LocalDatasetDirectory
         raise FileNotFoundError(f"数据集目录不存在: {selected_root}")
     if not selected_root.is_dir():
         raise DatasetLayoutError(f"选择的路径不是目录: {selected_root}")
-
-    located = _locate_dataset_root(selected_root)
-    return LocalDatasetDirectory(
-        selected_root=selected_root,
-        dataset_root=located.dataset_root,
-        images_dir=located.images_dir,
-        annotation_path=located.annotation_path,
-        annotation_format=located.annotation_format,
-        registered_dir=located.registered_dir,
+    direct_match = _match_local_dataset_root(selected_root, selected_root)
+    if direct_match is not None:
+        return direct_match
+    nested_test_match = _match_local_dataset_root(selected_root, selected_root / "test")
+    if nested_test_match is not None:
+        return nested_test_match
+    raise DatasetLayoutError(
+        "目录必须直接是测试目录，或是直接包含 test/ 的数据集根目录；请不要选择更上层的大目录"
     )
 
 

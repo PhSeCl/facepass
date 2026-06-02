@@ -1,8 +1,8 @@
 import os
 import time
-from collections.abc import Callable
 from pathlib import Path
 from typing import ParamSpec, TypeVar
+from collections.abc import Callable
 
 import gradio as gr
 import requests
@@ -11,21 +11,11 @@ from PIL import Image, ImageDraw
 
 BACKEND_URL = os.getenv("FACEPASS_BACKEND_URL", "http://127.0.0.1:8000")
 REQUEST_TIMEOUT = 5
-DATASET_EVAL_TIMEOUT = 60
+# Dataset evaluation over the bundled dataset/ directory can take a couple of
+# minutes on CPU even when the local gallery is already cached.
+DATASET_EVAL_TIMEOUT = int(os.getenv("FACEPASS_DATASET_EVAL_TIMEOUT", "300"))
 P = ParamSpec("P")
 R = TypeVar("R")
-
-
-def _resolve_dataset_browser_root() -> str:
-    configured = os.getenv("FACEPASS_FRONTEND_FILE_ROOT")
-    if configured:
-        candidate = Path(configured)
-        if candidate.exists():
-            return str(candidate)
-    return str(Path.cwd())
-
-
-DATASET_BROWSER_ROOT = _resolve_dataset_browser_root()
 
 
 def _with_retry(
@@ -208,10 +198,10 @@ def inspect_dataset_via_backend(
 ) -> tuple[bool, str]:
     if not dataset_path:
         if source_mode == "directory":
-            return False, "请先选择一个数据集文件夹"
+            return False, "请先输入数据集目录路径"
         return False, "请先上传一个 test.zip"
     if source_mode == "directory" and not Path(dataset_path).is_dir():
-        return False, "请选择文件夹，不要选择具体文件"
+        return False, "请输入存在的数据集目录路径"
     try:
         if source_mode == "directory":
             response = _post_dataset_inspect_directory(dataset_path, backend_url)
@@ -245,10 +235,10 @@ def run_dataset_eval_via_backend(
 ):
     if not dataset_path:
         if source_mode == "directory":
-            return "", "", "", "", [], [], "请先选择一个数据集文件夹"
+            return "", "", "", "", [], [], "请先输入数据集目录路径"
         return "", "", "", "", [], [], "请先上传一个 test.zip"
     if source_mode == "directory" and not Path(dataset_path).is_dir():
-        return "", "", "", "", [], [], "请选择文件夹，不要选择具体文件"
+        return "", "", "", "", [], [], "请输入存在的数据集目录路径"
     try:
         if source_mode == "directory":
             response = _post_dataset_eval_directory(dataset_path, gallery_choice, backend_url)
@@ -290,7 +280,7 @@ def load_identities(backend_url: str = BACKEND_URL):
         response = requests.get(f"{backend_url.rstrip('/')}/identities", timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
         return [
-            [item["identity_id"], item.get("name") or "", item["count"]]
+            [item["identity_id"], item.get("name") or "", item.get("valid_image_count", item["count"])]
             for item in response.json().get("identities", [])
         ]
     except requests.RequestException:
@@ -388,12 +378,15 @@ with gr.Blocks(title="FacePass") as demo:
                 )
 
             with gr.Tab("文件夹"):
-                directory_input = gr.FileExplorer(
-                    label="选择数据集文件夹",
-                    root_dir=DATASET_BROWSER_ROOT,
-                    file_count="single",
-                    visible=True,
-                    height=320,
+                gr.Markdown(
+                    "输入或粘贴本机数据集目录绝对路径，例如 `F:\\datasets\\my_eval`。"
+                    " 这里不做系统原生文件夹选择器：纯浏览器 + Gradio 无法可靠暴露任意本机绝对目录路径，"
+                    "因此目录模式改为显式路径输入，并由后端直接从该路径读取数据。"
+                )
+                directory_input = gr.Textbox(
+                    label="数据集目录路径",
+                    placeholder=r"例如 F:\datasets\my_eval",
+                    lines=1,
                 )
                 directory_inspect_button = gr.Button("检查底库来源", variant="secondary")
                 directory_gallery_choice = gr.Radio(
@@ -427,7 +420,7 @@ with gr.Blocks(title="FacePass") as demo:
     with gr.Tab("身份库"):
         refresh = gr.Button("刷新身份库")
         identities_table = gr.Dataframe(
-            headers=["身份", "姓名", "注册图数量"],
+            headers=["身份", "姓名", "有效注册图数量"],
             datatype=["str", "str", "number"],
         )
         refresh.click(load_identities, outputs=identities_table)
