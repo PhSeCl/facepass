@@ -52,6 +52,15 @@ class ScenarioModel:
                     landmarks=None,
                 )
             ]
+        if blue > 240 and green < 20 and red < 20:
+            return [
+                DetectedFace(
+                    bbox=(9, 10, 11, 12),
+                    embedding=unit([0.2, 0.1, 0.9746794]),
+                    det_score=0.8,
+                    landmarks=None,
+                )
+            ]
         if blue > 240 and green < 20 and red > 240:
             return [
                 DetectedFace(
@@ -85,6 +94,7 @@ def test_generate_draft_annotations_writes_scores_and_review_warnings(
     write_image(registered_root / "p02" / "r1.jpg", np.full((8, 8, 3), (0, 255, 0), dtype=np.uint8))
     write_image(images_dir / "p01_t01.jpg", np.full((8, 8, 3), (255, 255, 0), dtype=np.uint8))
     write_image(images_dir / "p02_t02.jpg", np.full((8, 8, 3), (0, 255, 255), dtype=np.uint8))
+    write_image(images_dir / "p04_t04.jpg", np.full((8, 8, 3), (0, 0, 255), dtype=np.uint8))
     write_image(images_dir / "p03_t03.jpg", np.full((8, 8, 3), (255, 0, 255), dtype=np.uint8))
     write_image(images_dir / "group_01.jpg", np.full((8, 8, 3), (128, 128, 128), dtype=np.uint8))
 
@@ -104,6 +114,7 @@ def test_generate_draft_annotations_writes_scores_and_review_warnings(
             images_dir=images_dir,
             out_path=output_path,
             review_threshold=0.45,
+            draft_identity_threshold=0.25,
             overwrite=False,
         )
 
@@ -113,6 +124,7 @@ def test_generate_draft_annotations_writes_scores_and_review_warnings(
     assert payload["p01_t01.jpg"] == [{"bbox": [1, 2, 3, 4], "identity": "p01", "score": 1.0}]
     assert payload["p02_t02.jpg"][0]["identity"] == "p02"
     assert payload["p02_t02.jpg"][0]["score"] == pytest.approx(0.34, abs=1e-3)
+    assert payload["p04_t04.jpg"] == [{"bbox": [9, 10, 11, 12], "identity": "unknown", "score": pytest.approx(0.2, abs=1e-3)}]
     assert payload["p03_t03.jpg"][0]["identity"] == "p01"
     assert payload["p03_t03.jpg"][1]["identity"] == "p02"
     assert payload["group_01.jpg"] == []
@@ -121,11 +133,13 @@ def test_generate_draft_annotations_writes_scores_and_review_warnings(
         "p01_t01.jpg",
         "p02_t02.jpg",
         "p03_t03.jpg",
+        "p04_t04.jpg",
     ]
-    assert summary.processed_images == 4
-    assert summary.total_faces == 4
-    assert summary.review_images == 3
+    assert summary.processed_images == 5
+    assert summary.total_faces == 5
+    assert summary.review_images == 4
     assert "p02_t02.jpg" in caplog.text
+    assert "p04_t04.jpg" in caplog.text
     assert "低置信度" in caplog.text
     assert "p03_t03.jpg" in caplog.text
     assert "单人照检出多脸" in caplog.text
@@ -140,6 +154,7 @@ def test_preannotate_parser_defaults_to_dataset_directories() -> None:
     assert args.out == "dataset/test/annotation.json"
     assert args.registered_root == "dataset/registered"
     assert args.review_threshold == 0.45
+    assert args.draft_identity_threshold == 0.25
     assert args.overwrite is False
 
 

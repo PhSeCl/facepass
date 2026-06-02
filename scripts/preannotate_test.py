@@ -62,6 +62,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Confidence line used only to flag draft labels for manual review.",
     )
     parser.add_argument(
+        "--draft-identity-threshold",
+        type=float,
+        default=0.25,
+        help="Below this similarity, draft labels are written as unknown instead of a registered identity.",
+    )
+    parser.add_argument(
         "--overwrite",
         action="store_true",
         help="Overwrite an existing annotation file.",
@@ -110,6 +116,7 @@ def main(argv: list[str] | None = None) -> int:
             images_dir=args.images_dir,
             out_path=output_path,
             review_threshold=args.review_threshold,
+            draft_identity_threshold=args.draft_identity_threshold,
             overwrite=args.overwrite,
         )
     except (

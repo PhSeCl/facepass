@@ -37,6 +37,7 @@ def generate_draft_annotations(
     images_dir: str | Path,
     out_path: str | Path,
     review_threshold: float,
+    draft_identity_threshold: float,
     overwrite: bool = False,
 ) -> PreannotationSummary:
     images_dir = Path(images_dir)
@@ -70,11 +71,16 @@ def generate_draft_annotations(
         needs_review = False
         review_reasons: list[str] = []
         for preview in previews:
+            draft_identity = (
+                preview.best_identity_id
+                if preview.best_identity_id and preview.similarity >= draft_identity_threshold
+                else "unknown"
+            )
             if preview.best_identity_id:
                 faces.append(
                     {
                         "bbox": list(preview.bbox),
-                        "identity": preview.best_identity_id,
+                        "identity": draft_identity,
                         "score": round(float(preview.similarity), 6),
                     }
                 )
