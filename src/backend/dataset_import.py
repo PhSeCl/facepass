@@ -48,6 +48,7 @@ class DetectionIssue:
 @dataclass(frozen=True)
 class ExternalEvalResult:
     gallery_source: str
+    dataset: GroupedSelfDataset
     report: EndToEndEvalReport
     confusion_pairs: list[tuple[str, str]]
     missed_detections: list[DetectionIssue]
@@ -166,6 +167,17 @@ def extract_dataset_archive(archive_path: str | Path) -> ExtractedDatasetArchive
         raise
 
 
+def inspect_external_dataset_archive(archive_path: str | Path) -> bool:
+    extracted_root: Path | None = None
+    try:
+        extracted = extract_dataset_archive(archive_path)
+        extracted_root = extracted.extracted_root
+        return extracted.registered_dir is not None
+    finally:
+        if extracted_root is not None:
+            shutil.rmtree(extracted_root, ignore_errors=True)
+
+
 def _resolve_registered_root(
     extracted: ExtractedDatasetArchive,
     gallery_choice: str,
@@ -236,6 +248,7 @@ def run_external_eval(
         missed_detections, false_positives = _collect_detection_issues(report, dataset)
         return ExternalEvalResult(
             gallery_source=gallery_source,
+            dataset=dataset,
             report=report,
             confusion_pairs=report.metrics.confusion_pairs,
             missed_detections=missed_detections,

@@ -3,11 +3,13 @@ from fastapi.testclient import TestClient
 from types import SimpleNamespace
 from PIL import Image
 import io
+import base64
 
 import pytest
 
 import src.backend.api as api
 from src.common.errors import ModelLoadError, ModelNotFoundError, ModelPathMissingError
+from src.backend.dataset_import import DatasetArchiveError, DatasetLayoutError
 
 app = api.app
 
@@ -209,3 +211,109 @@ def test_recognize_returns_readable_500_and_service_stays_alive_on_model_load_er
     assert "runtime inference failed" in first.json()["message"]
     assert second.status_code == 200
     assert second.json() == []
+
+
+def test_dataset_inspect_reports_registered_presence(monkeypatch) -> None:
+    client = TestClient(app)
+
+    monkeypatch.setattr(api, "inspect_external_dataset_archive", lambda path: True)
+
+    response = client.post(
+        "/dataset-eval/inspect",
+        files={"file": ("test.zip", b"zip-bytes", "application/zip")},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"has_registered": True}
+
+
+def test_dataset_inspect_returns_readable_archive_error(monkeypatch) -> None:
+    client = TestClient(app)
+
+    monkeypatch.setattr(
+        api,
+        "inspect_external_dataset_archive",
+        lambda path: (_ for _ in ()).throw(DatasetArchiveError("压缩包无法解压,可能已损坏")),
+    )
+
+    response = client.post(
+        "/dataset-eval/inspect",
+        files={"file": ("bad.zip", b"bad", "application/zip")},
+    )
+
+    assert response.status_code == 400
+    assert "压缩包无法解压" in response.json()["message"]
+
+
+def test_dataset_eval_returns_structured_report(monkeypatch) -> None:
+    client = TestClient(app)
+    transparent_png = base64.b64encode(
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
+        b"\x00\x00\x00\rIDATx\x9cc`\x00\x00\x00\x02\x00\x01\xe2!\xbc3\x00\x00\x00\x00IEND\xaeB`\x82"
+    ).decode("ascii")
+
+    monkeypatch.setattr(
+        api,
+        "run_external_eval",
+        lambda *args, **kwargs: SimpleNamespace(
+            gallery_source="archive",
+            report=SimpleNamespace(
+                metrics=SimpleNamespace(
+                    strict_top1_accuracy=1.0,
+                    matched_top1_accuracy=1.0,
+                    detection_recall=1.0,
+                    detection_precision=1.0,
+                    unknown_detected_accuracy=1.0,
+                    predicted_unknown_precision=1.0,
+                ),
+            ),
+            confusion_pairs=[("p01", "p01")],
+            missed_detections=[SimpleNamespace(image_name="miss.jpg", bbox=(1, 2, 3, 4))],
+            false_positives=[SimpleNamespace(image_name="fp.jpg", bbox=(5, 6, 7, 8))],
+            dataset=SimpleNamespace(),
+        ),
+    )
+    monkeypatch.setattr(
+        api,
+        "_render_external_eval_plots",
+        lambda dataset, report: {
+            "confusion_matrix": f"data:image/png;base64,{transparent_png}",
+            "detection_metrics": f"data:image/png;base64,{transparent_png}",
+            "accuracy_metrics": f"data:image/png;base64,{transparent_png}",
+        },
+    )
+    monkeypatch.setattr(api, "get_recognizer", lambda: SimpleNamespace(model=object()))
+
+    response = client.post(
+        "/dataset-eval/run",
+        data={"gallery_choice": "archive"},
+        files={"file": ("test.zip", b"zip-bytes", "application/zip")},
+    )
+
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["gallery_source"] == "archive"
+    assert payload["metrics"]["strict_top1_accuracy"] == 1.0
+    assert payload["plots"]["confusion_matrix"].startswith("data:image/png;base64,")
+    assert payload["missed_detections"] == [{"image_name": "miss.jpg", "bbox": [1, 2, 3, 4]}]
+    assert payload["false_positives"] == [{"image_name": "fp.jpg", "bbox": [5, 6, 7, 8]}]
+
+
+def test_dataset_eval_returns_readable_layout_error(monkeypatch) -> None:
+    client = TestClient(app)
+    monkeypatch.setattr(api, "get_recognizer", lambda: SimpleNamespace(model=object()))
+    monkeypatch.setattr(
+        api,
+        "run_external_eval",
+        lambda *args, **kwargs: (_ for _ in ()).throw(DatasetLayoutError("解压成功但未找到 images/ 或标注文件")),
+    )
+
+    response = client.post(
+        "/dataset-eval/run",
+        data={"gallery_choice": "local"},
+        files={"file": ("test.zip", b"zip-bytes", "application/zip")},
+    )
+
+    assert response.status_code == 400
+    assert "未找到 images/" in response.json()["message"]

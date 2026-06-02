@@ -1,10 +1,12 @@
 import csv
+import base64
+import tempfile
 import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -19,9 +21,20 @@ from src.common.errors import (
 )
 from src.common.images import safe_load_image
 from src.common.logging import get_logger
+from src.eval.end2end_reporting import (
+    plot_accuracy_metrics,
+    plot_confusion_matrix,
+    plot_detection_metrics,
+)
 from src.face_model import create_model
 
 from .config import settings
+from .dataset_import import (
+    DatasetArchiveError,
+    DatasetLayoutError,
+    inspect_external_dataset_archive,
+    run_external_eval,
+)
 from .gallery import Gallery
 from .recognizer import Recognizer
 from .schemas import ErrorResponse, IdentitiesResponse, IdentitySummary, RecognitionResultModel
@@ -133,6 +146,40 @@ def get_recognizer() -> Recognizer | None:
     return _recognizer
 
 
+def _write_temp_upload(content: bytes, suffix: str) -> Path:
+    handle = tempfile.NamedTemporaryFile(prefix="facepass-upload-", suffix=suffix, delete=False)
+    try:
+        handle.write(content)
+    finally:
+        handle.close()
+    return Path(handle.name)
+
+
+def _png_to_data_url(path: Path) -> str:
+    payload = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:image/png;base64,{payload}"
+
+
+def _render_external_eval_plots(dataset, report) -> dict[str, str]:
+    temp_dir = Path(tempfile.mkdtemp(prefix="facepass-eval-plots-"))
+    try:
+        confusion_path = temp_dir / "confusion.png"
+        detection_path = temp_dir / "detection.png"
+        accuracy_path = temp_dir / "accuracy.png"
+        plot_confusion_matrix(dataset, report, confusion_path)
+        plot_detection_metrics(report, detection_path)
+        plot_accuracy_metrics(report, accuracy_path)
+        return {
+            "confusion_matrix": _png_to_data_url(confusion_path),
+            "detection_metrics": _png_to_data_url(detection_path),
+            "accuracy_metrics": _png_to_data_url(accuracy_path),
+        }
+    finally:
+        for child in temp_dir.glob("*"):
+            child.unlink(missing_ok=True)
+        temp_dir.rmdir()
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -172,3 +219,75 @@ async def recognize(file: UploadFile = File(...)) -> list[RecognitionResultModel
         return []
     results = recognizer.recognize_image(image)
     return [RecognitionResultModel(**result.__dict__) for result in results]
+
+
+@app.post("/dataset-eval/inspect", responses={400: {"model": ErrorResponse}, 413: {"model": ErrorResponse}})
+async def inspect_dataset_archive(file: UploadFile = File(...)) -> dict[str, bool]:
+    content = await file.read()
+    if len(content) > settings.max_upload_bytes:
+        raise HTTPException(status_code=413, detail={"message": "上传压缩包过大"})
+
+    archive_path = _write_temp_upload(content, Path(file.filename or "dataset.zip").suffix or ".zip")
+    try:
+        has_registered = inspect_external_dataset_archive(archive_path)
+    except (DatasetArchiveError, DatasetLayoutError) as exc:
+        raise HTTPException(status_code=400, detail={"message": str(exc)}) from exc
+    finally:
+        archive_path.unlink(missing_ok=True)
+    return {"has_registered": has_registered}
+
+
+@app.post("/dataset-eval/run", responses={400: {"model": ErrorResponse}, 413: {"model": ErrorResponse}})
+async def evaluate_dataset_archive(
+    gallery_choice: str = Form("local"),
+    file: UploadFile = File(...),
+) -> dict[str, object]:
+    content = await file.read()
+    if len(content) > settings.max_upload_bytes:
+        raise HTTPException(status_code=413, detail={"message": "上传压缩包过大"})
+
+    recognizer = get_recognizer()
+    if recognizer is None:
+        raise HTTPException(status_code=503, detail={"message": "识别器未初始化"})
+
+    archive_path = _write_temp_upload(content, Path(file.filename or "dataset.zip").suffix or ".zip")
+    try:
+        result = run_external_eval(
+            archive_path,
+            gallery_choice,
+            model=recognizer.model,
+            threshold=settings.threshold,
+            local_registered_root=settings.registered_dir,
+        )
+        metrics = result.report.metrics
+        return {
+            "gallery_source": result.gallery_source,
+            "metrics": {
+                "strict_top1_accuracy": metrics.strict_top1_accuracy,
+                "matched_top1_accuracy": metrics.matched_top1_accuracy,
+                "detection_recall": metrics.detection_recall,
+                "detection_precision": metrics.detection_precision,
+                "unknown_detected_accuracy": metrics.unknown_detected_accuracy,
+                "predicted_unknown_precision": metrics.predicted_unknown_precision,
+            },
+            "plots": _render_external_eval_plots(result.dataset, result.report),
+            "confusion_pairs": [
+                {
+                    "true_identity_id": true_identity_id,
+                    "predicted_identity_id": predicted_identity_id,
+                }
+                for true_identity_id, predicted_identity_id in result.confusion_pairs
+            ],
+            "missed_detections": [
+                {"image_name": item.image_name, "bbox": list(item.bbox)}
+                for item in result.missed_detections
+            ],
+            "false_positives": [
+                {"image_name": item.image_name, "bbox": list(item.bbox)}
+                for item in result.false_positives
+            ],
+        }
+    except (DatasetArchiveError, DatasetLayoutError, FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail={"message": str(exc)}) from exc
+    finally:
+        archive_path.unlink(missing_ok=True)
