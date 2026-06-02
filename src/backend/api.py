@@ -258,6 +258,7 @@ async def evaluate_dataset_archive(
             model=recognizer.model,
             threshold=settings.threshold,
             local_registered_root=settings.registered_dir,
+            local_gallery=_gallery,
         )
         metrics = result.report.metrics
         return {

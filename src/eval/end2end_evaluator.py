@@ -31,10 +31,12 @@ def evaluate_end2end(
     model: FaceModel,
     threshold: float,
     id2name: dict[str, str] | None = None,
+    gallery: Gallery | None = None,
 ) -> EndToEndEvalReport:
-    gallery = Gallery()
-    gallery.build_from_dir(str(dataset.registered_root), model)
-    recognizer = Recognizer(model, gallery, threshold, id2name or {})
+    active_gallery = gallery or Gallery()
+    if gallery is None:
+        active_gallery.build_from_dir(str(dataset.registered_root), model)
+    recognizer = Recognizer(model, active_gallery, threshold, id2name or {})
 
     image_results: list[ImageMatchResult] = []
     for sample in dataset.images:

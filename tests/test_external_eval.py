@@ -9,6 +9,7 @@ import pytest
 from PIL import Image
 
 import src.backend.dataset_import as dataset_import
+from src.backend.gallery import Gallery
 from src.face_model.fake_model import FakeFaceModel
 
 
@@ -135,6 +136,42 @@ def test_run_external_eval_keeps_local_gallery_when_archive_has_registered_but_l
     assert result.report.metrics.strict_top1_accuracy == 0.0
     assert result.report.metrics.predicted_unknown_precision == 0.0
     assert result.report.metrics.confusion_pairs == [("p01", "unknown")]
+
+
+def test_run_external_eval_reuses_prebuilt_local_gallery_without_rebuilding(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    local_registered_root = create_registered_root(tmp_path / "local_registered", {"p01": (255, 0, 0)})
+    archive_path = create_dataset_archive(
+        tmp_path / "local_only.zip",
+        test_images={"p01_t01.png": (255, 0, 0)},
+        annotations=[
+            {
+                "image": "p01_t01.png",
+                "faces": [{"bbox": [0, 0, 8, 8], "identity": "p01"}],
+            }
+        ],
+    )
+    cached_gallery = Gallery()
+    cached_gallery.register("p01", [np.array([0.0, 0.0, 1.0], dtype=np.float32)])
+
+    def fail_build_from_dir(self, root, model) -> None:
+        raise AssertionError("build_from_dir should not run when local gallery is prebuilt")
+
+    monkeypatch.setattr(Gallery, "build_from_dir", fail_build_from_dir)
+
+    result = dataset_import.run_external_eval(
+        archive_path,
+        "local",
+        model=FakeFaceModel(),
+        threshold=0.1,
+        local_registered_root=local_registered_root,
+        local_gallery=cached_gallery,
+    )
+
+    assert result.gallery_source == "local"
+    assert result.report.metrics.strict_top1_accuracy == 1.0
 
 
 def test_run_external_eval_cleans_up_temporary_directory_on_failure(

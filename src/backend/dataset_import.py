@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from src.common.errors import FacePassError
+from src.backend.gallery import Gallery
 from src.eval.end2end_dataset import GroupedSelfDataset, load_grouped_self_dataset
 from src.eval.end2end_evaluator import EndToEndEvalReport, evaluate_end2end
 from src.face_model.base import FaceModel
@@ -228,6 +229,7 @@ def run_external_eval(
     model: FaceModel,
     threshold: float,
     local_registered_root: str | Path,
+    local_gallery: Gallery | None = None,
 ) -> ExternalEvalResult:
     extracted_root: Path | None = None
     try:
@@ -244,7 +246,12 @@ def run_external_eval(
             registered_root=registered_root,
         )
         dataset = _with_registered_root(dataset, registered_root)
-        report = evaluate_end2end(dataset=dataset, model=model, threshold=threshold)
+        report = evaluate_end2end(
+            dataset=dataset,
+            model=model,
+            threshold=threshold,
+            gallery=local_gallery if gallery_source == "local" else None,
+        )
         missed_detections, false_positives = _collect_detection_issues(report, dataset)
         return ExternalEvalResult(
             gallery_source=gallery_source,

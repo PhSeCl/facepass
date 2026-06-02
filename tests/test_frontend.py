@@ -1,8 +1,11 @@
 import requests
+import pytest
 from PIL import Image
 
 from src.frontend.app import (
+    DATASET_EVAL_TIMEOUT,
     inspect_dataset_via_backend,
+    _post_dataset_eval,
     recognize_via_backend,
     run_dataset_eval_via_backend,
 )
@@ -78,18 +81,68 @@ def test_frontend_evaluates_dataset_and_decodes_plot_images(monkeypatch, tmp_pat
 
     (
         summary,
-        confusion_image,
-        detection_image,
-        accuracy_image,
+        confusion_html,
+        detection_html,
+        accuracy_html,
         missed_rows,
         false_rows,
         message,
     ) = run_dataset_eval_via_backend(str(archive_path), "archive", backend_url="http://127.0.0.1:8000")
 
     assert "strict top-1" in summary
-    assert confusion_image.size == (1, 1)
-    assert detection_image.size == (1, 1)
-    assert accuracy_image.size == (1, 1)
+    assert 'src="data:image/png;base64,' in confusion_html
+    assert 'src="data:image/png;base64,' in detection_html
+    assert 'src="data:image/png;base64,' in accuracy_html
     assert missed_rows == [["miss.jpg", "1, 2, 3, 4"]]
     assert false_rows == [["fp.jpg", "5, 6, 7, 8"]]
     assert message == ""
+
+
+def test_frontend_dataset_eval_uses_longer_timeout(monkeypatch, tmp_path) -> None:
+    archive_path = tmp_path / "test.zip"
+    archive_path.write_bytes(b"zip")
+    observed: dict[str, object] = {}
+
+    class FakeResponse:
+        status_code = 200
+
+    def fake_post(*args, **kwargs):
+        observed["timeout"] = kwargs.get("timeout")
+        return FakeResponse()
+
+    monkeypatch.setattr("src.frontend.app.requests.post", fake_post)
+
+    _post_dataset_eval(str(archive_path), "local", backend_url="http://127.0.0.1:8000")
+
+    assert observed["timeout"] == DATASET_EVAL_TIMEOUT
+
+
+def test_frontend_dataset_eval_timeout_returns_friendly_message(monkeypatch, tmp_path) -> None:
+    archive_path = tmp_path / "test.zip"
+    archive_path.write_bytes(b"zip")
+
+    def raise_timeout(*args, **kwargs):
+        raise requests.Timeout("read timed out")
+
+    monkeypatch.setattr("src.frontend.app._post_dataset_eval", raise_timeout)
+
+    result = run_dataset_eval_via_backend(str(archive_path), "local", backend_url="http://127.0.0.1:8000")
+
+    assert result == ("", "", "", "", [], [], "数据集评测超时，请稍后重试或检查后端日志")
+
+
+def test_frontend_dataset_eval_timeout_does_not_retry_heavy_request(monkeypatch, tmp_path) -> None:
+    archive_path = tmp_path / "test.zip"
+    archive_path.write_bytes(b"zip")
+    attempts = {"count": 0}
+
+    def raise_timeout(*args, **kwargs):
+        attempts["count"] += 1
+        raise requests.Timeout("read timed out")
+
+    monkeypatch.setattr("src.frontend.app.requests.post", raise_timeout)
+
+    with pytest.raises(requests.Timeout):
+        _post_dataset_eval(str(archive_path), "local", backend_url="http://127.0.0.1:8000")
+
+    assert attempts["count"] == 1

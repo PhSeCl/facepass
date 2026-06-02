@@ -251,11 +251,11 @@ def test_dataset_eval_returns_structured_report(monkeypatch) -> None:
         b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
         b"\x00\x00\x00\rIDATx\x9cc`\x00\x00\x00\x02\x00\x01\xe2!\xbc3\x00\x00\x00\x00IEND\xaeB`\x82"
     ).decode("ascii")
+    captured: dict[str, object] = {}
 
-    monkeypatch.setattr(
-        api,
-        "run_external_eval",
-        lambda *args, **kwargs: SimpleNamespace(
+    def fake_run_external_eval(*args, **kwargs):
+        captured["kwargs"] = kwargs
+        return SimpleNamespace(
             gallery_source="archive",
             report=SimpleNamespace(
                 metrics=SimpleNamespace(
@@ -271,8 +271,9 @@ def test_dataset_eval_returns_structured_report(monkeypatch) -> None:
             missed_detections=[SimpleNamespace(image_name="miss.jpg", bbox=(1, 2, 3, 4))],
             false_positives=[SimpleNamespace(image_name="fp.jpg", bbox=(5, 6, 7, 8))],
             dataset=SimpleNamespace(),
-        ),
-    )
+        )
+
+    monkeypatch.setattr(api, "run_external_eval", fake_run_external_eval)
     monkeypatch.setattr(
         api,
         "_render_external_eval_plots",
@@ -283,6 +284,7 @@ def test_dataset_eval_returns_structured_report(monkeypatch) -> None:
         },
     )
     monkeypatch.setattr(api, "get_recognizer", lambda: SimpleNamespace(model=object()))
+    monkeypatch.setattr(api, "_gallery", api.Gallery())
 
     response = client.post(
         "/dataset-eval/run",
@@ -298,6 +300,7 @@ def test_dataset_eval_returns_structured_report(monkeypatch) -> None:
     assert payload["plots"]["confusion_matrix"].startswith("data:image/png;base64,")
     assert payload["missed_detections"] == [{"image_name": "miss.jpg", "bbox": [1, 2, 3, 4]}]
     assert payload["false_positives"] == [{"image_name": "fp.jpg", "bbox": [5, 6, 7, 8]}]
+    assert captured["kwargs"]["local_gallery"] is api._gallery
 
 
 def test_dataset_eval_returns_readable_layout_error(monkeypatch) -> None:

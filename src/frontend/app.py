@@ -1,8 +1,6 @@
 import os
 import time
-import base64
 from collections.abc import Callable
-from io import BytesIO
 from pathlib import Path
 from typing import ParamSpec, TypeVar
 
@@ -13,6 +11,7 @@ from PIL import Image, ImageDraw
 
 BACKEND_URL = os.getenv("FACEPASS_BACKEND_URL", "http://127.0.0.1:8000")
 REQUEST_TIMEOUT = 5
+DATASET_EVAL_TIMEOUT = 60
 P = ParamSpec("P")
 R = TypeVar("R")
 
@@ -84,18 +83,13 @@ def _post_dataset_inspect(path: str, backend_url: str) -> requests.Response:
         )
 
 
-@_with_retry(
-    max_attempts=3,
-    base_delay=0.5,
-    exceptions=(requests.ConnectionError, requests.Timeout),
-)
 def _post_dataset_eval(path: str, gallery_choice: str, backend_url: str) -> requests.Response:
     with open(path, "rb") as handle:
         return requests.post(
             f"{backend_url.rstrip('/')}/dataset-eval/run",
             data={"gallery_choice": gallery_choice},
             files={"file": (Path(path).name, handle, "application/zip")},
-            timeout=REQUEST_TIMEOUT,
+            timeout=DATASET_EVAL_TIMEOUT,
         )
 
 
@@ -112,9 +106,12 @@ def _draw_results(image_path: str, results: list[dict]) -> Image.Image:
     return image
 
 
-def _decode_plot_image(data_url: str) -> Image.Image:
-    _, encoded = data_url.split(",", 1)
-    return Image.open(BytesIO(base64.b64decode(encoded))).convert("RGB")
+def _render_plot_html(data_url: str, alt: str) -> str:
+    return (
+        f'<div style="padding: 8px 0;">'
+        f'<img src="{data_url}" alt="{alt}" style="max-width: 100%; height: auto; display: block;" />'
+        f"</div>"
+    )
 
 
 def _format_bbox_rows(items: list[dict]) -> list[list[str]]:
@@ -198,26 +195,28 @@ def run_dataset_eval_via_backend(
     backend_url: str = BACKEND_URL,
 ):
     if not archive_path:
-        return "", None, None, None, [], [], "请先上传一个 test.zip"
+        return "", "", "", "", [], [], "请先上传一个 test.zip"
     try:
         response = _post_dataset_eval(archive_path, gallery_choice, backend_url)
-    except (requests.ConnectionError, requests.Timeout):
-        return "", None, None, None, [], [], "后端未启动，请先按 README 启动 uvicorn 服务"
+    except requests.Timeout:
+        return "", "", "", "", [], [], "数据集评测超时，请稍后重试或检查后端日志"
+    except requests.ConnectionError:
+        return "", "", "", "", [], [], "后端未启动，请先按 README 启动 uvicorn 服务"
 
     if response.status_code >= 400:
         try:
             payload = response.json()
         except ValueError:
             payload = None
-        return "", None, None, None, [], [], _friendly_http_error(response.status_code, payload)
+        return "", "", "", "", [], [], _friendly_http_error(response.status_code, payload)
 
     payload = response.json()
     plots = payload["plots"]
     return (
         _format_eval_summary(payload),
-        _decode_plot_image(plots["confusion_matrix"]),
-        _decode_plot_image(plots["detection_metrics"]),
-        _decode_plot_image(plots["accuracy_metrics"]),
+        _render_plot_html(plots["confusion_matrix"], "混淆矩阵"),
+        _render_plot_html(plots["detection_metrics"], "检测指标"),
+        _render_plot_html(plots["accuracy_metrics"], "识别准确率"),
         _format_bbox_rows(payload.get("missed_detections", [])),
         _format_bbox_rows(payload.get("false_positives", [])),
         "",
@@ -265,9 +264,9 @@ with gr.Blocks(title="FacePass") as demo:
             evaluate_button = gr.Button("运行数据集评测", variant="primary")
             dataset_message = gr.Markdown()
             summary_output = gr.Markdown(label="评测摘要")
-            confusion_output = gr.Image(label="混淆矩阵")
-            detection_output = gr.Image(label="检测指标")
-            accuracy_output = gr.Image(label="识别准确率")
+            confusion_output = gr.HTML(label="混淆矩阵")
+            detection_output = gr.HTML(label="检测指标")
+            accuracy_output = gr.HTML(label="识别准确率")
             missed_output = gr.Dataframe(
                 headers=["图片", "bbox"],
                 datatype=["str", "str"],
