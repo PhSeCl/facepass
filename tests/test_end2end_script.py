@@ -7,6 +7,7 @@ import numpy as np
 from PIL import Image
 
 from scripts.eval_end2end import main
+from scripts.eval_end2end import build_parser
 
 
 def write_image(path: Path, pixels: np.ndarray) -> None:
@@ -78,7 +79,15 @@ def test_eval_end2end_returns_friendly_message_when_dataset_is_missing(tmp_path,
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    assert "需要 data/test 标注" in captured.out
+    assert "需要 dataset/test 标注" in captured.out
+
+
+def test_eval_end2end_parser_defaults_to_dataset_directories() -> None:
+    args = build_parser().parse_args([])
+
+    assert args.annotations_path == "dataset/test/annotations.jsonl"
+    assert args.test_root == "dataset/test"
+    assert args.registered_root == "dataset/registered"
 
 
 def test_eval_end2end_script_writes_report_and_plots(tmp_path) -> None:

@@ -7,7 +7,7 @@ import numpy as np
 from PIL import Image
 
 from src.eval.self_dataset import load_self_dataset
-from scripts.eval_self import main
+from scripts.eval_self import build_parser, main
 
 
 def write_image(path: Path, pixels: np.ndarray) -> None:
@@ -104,6 +104,14 @@ def test_eval_self_returns_friendly_error_when_annotations_missing(tmp_path, cap
     assert exit_code == 1
     assert "不存在" in captured.out
     assert not report_path.exists()
+
+
+def test_eval_self_parser_defaults_to_dataset_directories() -> None:
+    args = build_parser().parse_args([])
+
+    assert args.annotations_path == "dataset/test/annotations.jsonl"
+    assert args.test_root == "dataset/test"
+    assert args.registered_root == "dataset/registered"
 
 
 def test_eval_self_script_runs_with_fake_model_and_writes_report(tmp_path) -> None:

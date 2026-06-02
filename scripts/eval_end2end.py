@@ -24,17 +24,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run end-to-end multi-face evaluation on annotated images.")
     parser.add_argument(
         "--annotations-path",
-        default="data/test/annotations.jsonl",
+        default="dataset/test/annotations.jsonl",
         help="JSONL file containing image_path and faces annotations.",
     )
     parser.add_argument(
         "--test-root",
-        default="data/test",
+        default="dataset/test",
         help="Root directory for annotated test images.",
     )
     parser.add_argument(
         "--registered-root",
-        default="data/registered",
+        default="dataset/registered",
         help="Root directory for registered identity images.",
     )
     parser.add_argument(
@@ -195,7 +195,7 @@ def plot_accuracy_metrics(report: EndToEndEvalReport, output_path: str | Path) -
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if not _has_required_dataset(args):
-        print("需要 data/test 标注和 data/registered 注册集后才能运行端到端评测。")
+        print("需要 dataset/test 标注和 dataset/registered 注册集后才能运行端到端评测。")
         return 0
 
     dataset = load_grouped_self_dataset(

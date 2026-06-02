@@ -28,7 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--registered-root",
-        default="data/registered",
+        default="dataset/registered",
         help="Root directory of registered identity images.",
     )
     parser.add_argument(

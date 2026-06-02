@@ -20,9 +20,13 @@ scripts/
 |-- eval_self.py         # 单脸裁剪口径评测脚本
 |-- analyze_threshold.py # 注册集相似度分布与阈值分析
 `-- eval_end2end.py      # 多脸端到端评测与出图
+dataset/
+|-- registered/          # 真实注册集：p01..p20 注册照目录，本地放置，不进 git
+`-- test/                # 真实测试集与标注，本地放置，不进 git
 data/
-|-- registered/          # p01..p20 注册照目录，本地放置，不进 git
-`-- test/                # 测试图片，本地放置，不进 git
+|-- registered/          # 占位目录，仅保留 .gitkeep
+|-- test/                # 占位目录，仅保留 .gitkeep
+`-- tmp_*                # 测试 / 脚本用的临时 fixture，不是正式数据集
 models/                  # gallery.pkl 等本地产物，不进 git
 reports/                 # 评测 JSON / PNG 输出，本地产物，不进 git
 tests/                  # 接口、边界和错误路径测试
@@ -46,7 +50,7 @@ uv sync
 # 1. 准备本地 buffalo_l 模型目录，例如：
 #    F:\InsightFace\models_cache\models\buffalo_l
 #
-# 2. 准备注册集：将 p01..p20 的注册照放到 data/registered/p01/ 等目录。
+# 2. 准备注册集：将 p01..p20 的注册照放到 dataset/registered/p01/ 等目录。
 
 # 3. 启动后端和前端
 uv run python scripts/run_dev.py --model-path F:\InsightFace\models_cache\models\buffalo_l
@@ -113,7 +117,14 @@ curl http://127.0.0.1:8000/health
 {"image_path":"images/group_01.jpg","faces":[{"identity_id":"p01","bbox":[12,34,80,80]},{"identity_id":"unknown","bbox":[120,40,76,76]}]}
 ```
 
-其中 `bbox` 固定为 `[x, y, w, h]`。目前仓库内有三类相关入口：
+其中 `bbox` 固定为 `[x, y, w, h]`。
+
+目录约定需要特别说明：
+
+- `dataset/`：真实实验数据目录。当前实际使用的是 `dataset/registered` 和 `dataset/test`。
+- `data/`：仓库内测试与脚本 fixture 目录，主要放临时合成样本和 `.gitkeep`，不是正式数据集根目录。
+
+目前仓库内有三类相关入口：
 
 - `scripts/eval_self.py`：复用标注框裁剪后的单脸口径，适合先看识别本身是否区分开。
 - `scripts/eval_end2end.py`：复用真实 `Recognizer.recognize_image()` 整图链路，做“检测框 ↔ 标注框 IoU 贪心配对 + 端到端 top-1”评测。
@@ -123,9 +134,9 @@ curl http://127.0.0.1:8000/health
 
 ```powershell
 uv run python scripts/eval_self.py `
-  --annotations-path data/test/annotations.jsonl `
-  --test-root data/test `
-  --registered-root data/registered `
+  --annotations-path dataset/test/annotations.jsonl `
+  --test-root dataset/test `
+  --registered-root dataset/registered `
   --model-name insightface `
   --threshold 0.30
 ```
@@ -134,7 +145,7 @@ uv run python scripts/eval_self.py `
 
 ```powershell
 uv run python scripts/analyze_threshold.py `
-  --registered-root data/registered `
+  --registered-root dataset/registered `
   --model-name insightface `
   --histogram-path reports/threshold_hist.png
 ```
@@ -143,9 +154,9 @@ uv run python scripts/analyze_threshold.py `
 
 ```powershell
 uv run python scripts/eval_end2end.py `
-  --annotations-path data/test/annotations.jsonl `
-  --test-root data/test `
-  --registered-root data/registered `
+  --annotations-path dataset/test/annotations.jsonl `
+  --test-root dataset/test `
+  --registered-root dataset/registered `
   --model-name insightface `
   --threshold 0.30
 ```
@@ -163,7 +174,7 @@ uv run python scripts/eval_end2end.py `
 - 识别层：严格 `strict_top1_accuracy` 与宽松 `matched_top1_accuracy`
 - `unknown`：标注为 unknown 的检出准确率，以及系统判成 unknown 的精确率
 
-如果本机还没有准备 `data/test` 标注或 `data/registered` 注册集，`eval_end2end.py` 会打印提示并直接退出，不会抛异常。
+如果本机还没有准备 `dataset/test` 标注或 `dataset/registered` 注册集，`eval_end2end.py` 会打印提示并直接退出，不会抛异常。
 
 ## 错误处理
 
@@ -179,6 +190,7 @@ uv run python scripts/eval_end2end.py `
 
 - `models/`
 - `data/`
+- `dataset/`
 - `*.onnx`
 - `*.pkl`
 - `*.npy`
@@ -209,7 +221,7 @@ uv run pytest tests -q
 
 ## 待填项
 
-- 收集并放置真实 `data/registered/p01` 到 `p20` 注册照。
+- 收集并放置真实 `dataset/registered/p01` 到 `p20` 注册照。
 - 基于注册集内部相似度分布确定最终 unknown 阈值，不能用测试集调参。
 - 最终提交前按课程要求补充打包脚本和报告。
 

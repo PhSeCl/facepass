@@ -6,7 +6,7 @@ import numpy as np
 from PIL import Image
 import pytest
 
-from scripts.analyze_threshold import main
+from scripts.analyze_threshold import build_parser, main
 from src.eval.threshold import SimilarityDistributions, collect_similarity_distributions, suggest_threshold
 
 
@@ -67,6 +67,12 @@ def test_analyze_threshold_returns_friendly_error_when_registered_root_missing(t
     assert exit_code == 1
     assert "不存在" in captured.out
     assert not histogram_path.exists()
+
+
+def test_analyze_threshold_parser_defaults_to_dataset_registered() -> None:
+    args = build_parser().parse_args([])
+
+    assert args.registered_root == "dataset/registered"
 
 
 def test_analyze_threshold_script_writes_histogram_with_fake_model(tmp_path) -> None:

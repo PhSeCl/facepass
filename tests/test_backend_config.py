@@ -20,3 +20,9 @@ def test_module_level_settings_threshold_falls_back_to_default_when_config_missi
     reloaded = importlib.reload(backend_config)
 
     assert reloaded.settings.threshold == 0.30
+
+
+def test_settings_registered_dir_defaults_to_dataset_directory() -> None:
+    settings = backend_config.Settings()
+
+    assert settings.registered_dir == backend_config.ROOT_DIR / "dataset" / "registered"

@@ -25,7 +25,7 @@ class Settings:
     model_name: str = "insightface"
     threshold: float = field(default_factory=_load_threshold)
     gallery_path: Path = ROOT_DIR / "models" / "gallery.pkl"
-    registered_dir: Path = ROOT_DIR / "data" / "registered"
+    registered_dir: Path = ROOT_DIR / "dataset" / "registered"
     identities_csv: Path = ROOT_DIR / "dataset" / "identities.csv"
     max_upload_bytes: int = 10 * 1024 * 1024
 

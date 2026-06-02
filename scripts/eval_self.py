@@ -21,17 +21,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Evaluate self-collected identities and unknown faces.")
     parser.add_argument(
         "--annotations-path",
-        default="data/test/annotations.jsonl",
+        default="dataset/test/annotations.jsonl",
         help="JSONL file containing image_path and faces annotations.",
     )
     parser.add_argument(
         "--test-root",
-        default="data/test",
+        default="dataset/test",
         help="Root directory for annotated test images.",
     )
     parser.add_argument(
         "--registered-root",
-        default="data/registered",
+        default="dataset/registered",
         help="Root directory for registered identity images.",
     )
     parser.add_argument(
