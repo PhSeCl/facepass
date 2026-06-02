@@ -71,6 +71,34 @@ class Gallery:
         if not self._entries:
             raise EmptyGalleryError("身份库为空，至少需要一张有效注册图")
 
+    def build_from_cropped_dir(self, root: str, model: FaceModel) -> None:
+        root_path = Path(root)
+        if not root_path.exists():
+            raise EmptyGalleryError(f"注册集目录不存在: {root_path}")
+
+        empty_identities: list[str] = []
+        for identity_dir in sorted(path for path in root_path.iterdir() if path.is_dir()):
+            identity_embeddings: list[np.ndarray] = []
+            for image_path in sorted(identity_dir.rglob("*")):
+                if image_path.suffix.lower() not in IMAGE_EXTENSIONS:
+                    continue
+                try:
+                    image = safe_load_image(image_path)
+                    identity_embeddings.append(model.encode_aligned(image))
+                except (InvalidImageError, OSError, ValueError) as exc:
+                    logger.warning("跳过无效注册图 %s: %s", image_path, exc)
+            if not identity_embeddings:
+                empty_identities.append(identity_dir.name)
+                continue
+
+            averaged_embedding = np.mean(np.stack(identity_embeddings, axis=0), axis=0)
+            self.register(identity_dir.name, [averaged_embedding])
+
+        if empty_identities:
+            logger.warning("以下身份没有有效注册图: %s", ", ".join(empty_identities))
+        if not self._entries:
+            raise EmptyGalleryError("身份库为空，至少需要一张有效注册图")
+
     def match(self, embedding: np.ndarray) -> tuple[str, float] | None:
         if not self._entries:
             return None

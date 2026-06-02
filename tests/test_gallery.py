@@ -159,3 +159,54 @@ def test_build_from_dir_detects_faces_selects_largest_and_averages_per_identity(
     assert similarity > 0.99
     assert "检测到多张人脸" in caplog.text
     assert "未检测到人脸" in caplog.text
+
+
+class FakeCroppedBuildModel:
+    def __init__(self) -> None:
+        self.detect_calls = 0
+        self.encode_calls = 0
+
+    def encode_aligned(self, face_image: np.ndarray) -> np.ndarray:
+        self.encode_calls += 1
+        signature = tuple(int(value) for value in face_image[0, 0, :3])
+        dominant_channel = int(np.argmax(signature))
+        if dominant_channel == 2:
+            return unit([1, 0, 0])
+        if dominant_channel == 1:
+            return unit([0, 1, 0])
+        raise AssertionError(f"unexpected test image signature: {signature}")
+
+    def detect_and_encode(self, image: np.ndarray):
+        self.detect_calls += 1
+        raise AssertionError("cropped-face gallery build must not call detect_and_encode")
+
+
+def test_build_from_cropped_dir_uses_encode_aligned_and_averages_identity_embeddings(
+    tmp_path,
+) -> None:
+    root = tmp_path / "celeba_register"
+    identity_one = root / "identity_00070"
+    identity_two = root / "identity_00212"
+    identity_one.mkdir(parents=True)
+    identity_two.mkdir(parents=True)
+    Image.new("RGB", (8, 8), color=(255, 0, 0)).save(identity_one / "107551.jpg")
+    Image.new("RGB", (8, 8), color=(255, 0, 0)).save(identity_one / "130995.jpg")
+    Image.new("RGB", (8, 8), color=(0, 255, 0)).save(identity_two / "000001.jpg")
+
+    model = FakeCroppedBuildModel()
+    gallery = Gallery()
+
+    gallery.build_from_cropped_dir(str(root), model)
+
+    assert gallery.identities() == [
+        {"identity_id": "identity_00070", "count": 1},
+        {"identity_id": "identity_00212", "count": 1},
+    ]
+    identity_id, similarity = gallery.match(unit([1, 0, 0]))
+    assert identity_id == "identity_00070"
+    assert similarity == pytest.approx(1.0)
+    identity_id, similarity = gallery.match(unit([0, 1, 0]))
+    assert identity_id == "identity_00212"
+    assert similarity == pytest.approx(1.0)
+    assert model.encode_calls == 3
+    assert model.detect_calls == 0
