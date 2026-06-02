@@ -65,6 +65,25 @@ def test_recognizer_marks_unknown_below_threshold() -> None:
     assert results[0].similarity == 0.0
 
 
+def test_recognizer_preview_preserves_best_identity_below_threshold() -> None:
+    gallery = Gallery()
+    gallery.register("p01", [unit([1, 0, 0])])
+    recognizer = Recognizer(
+        model=FakeModel(unit([0, 1, 0])),
+        gallery=gallery,
+        threshold=0.3,
+        id2name={"p01": "Alice"},
+    )
+
+    previews = recognizer.preview_image(np.zeros((8, 8, 3), dtype=np.uint8))
+
+    assert len(previews) == 1
+    assert previews[0].best_identity_id == "p01"
+    assert previews[0].similarity == 0.0
+    assert previews[0].is_unknown is True
+    assert previews[0].bbox == (10, 20, 30, 40)
+
+
 def test_recognizer_marks_unknown_when_gallery_has_no_candidates() -> None:
     recognizer = Recognizer(
         model=FakeModel(unit([1, 0, 0])),
