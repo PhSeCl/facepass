@@ -47,10 +47,10 @@ uv sync
 
 ```powershell
 uv pip uninstall onnxruntime
-uv pip install onnxruntime-gpu==1.22.1
+uv pip install onnxruntime-gpu
 ```
 
-这一步是可选本地增强，不应直接改成项目默认依赖，否则会降低其他同学和 CI 的可移植性。
+这一步是可选本地增强，不应直接改成项目默认依赖，否则会降低其他同学和 CI 的可移植性。不同 Python / Windows 组合下可用的 GPU wheel 版本可能不同，安装后请立刻用下面的诊断脚本确认 provider 是否真的起来。
 
 后端默认配置在 `src/backend/config.py`，当前 `model_name="insightface"`。如果只想跑不依赖权重的后端集成测试，可以在测试里把配置切到 `fake`。
 
