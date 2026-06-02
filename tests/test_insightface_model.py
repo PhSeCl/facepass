@@ -31,6 +31,42 @@ def test_encode_aligned_uses_recognition_model_without_detection() -> None:
     assert np.allclose(embedding, np.array([0.6, 0.8], dtype=np.float32))
 
 
+def test_default_execution_providers_prefers_cuda_when_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        insightface_model_module.importlib,
+        "import_module",
+        lambda name: type(
+            "FakeOrtModule",
+            (),
+            {"get_available_providers": staticmethod(lambda: ["CUDAExecutionProvider", "CPUExecutionProvider"])},
+        )(),
+    )
+
+    providers = insightface_model_module._default_execution_providers()
+
+    assert providers == ["CUDAExecutionProvider", "CPUExecutionProvider"]
+
+
+def test_default_execution_providers_falls_back_to_cpu_when_cuda_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        insightface_model_module.importlib,
+        "import_module",
+        lambda name: type(
+            "FakeOrtModule",
+            (),
+            {"get_available_providers": staticmethod(lambda: ["AzureExecutionProvider", "CPUExecutionProvider"])},
+        )(),
+    )
+
+    providers = insightface_model_module._default_execution_providers()
+
+    assert providers == ["CPUExecutionProvider"]
+
+
 def test_insightface_model_resolves_validates_and_persists_explicit_path(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -55,16 +91,40 @@ def test_insightface_model_resolves_validates_and_persists_explicit_path(
     monkeypatch.setattr(insightface_model_module.model_config, "resolve_model_path", fake_resolve_model_path)
     monkeypatch.setattr(insightface_model_module.model_config, "validate_model_path", fake_validate_model_path)
     monkeypatch.setattr(insightface_model_module.model_config, "persist_path", persisted.append)
+    monkeypatch.setattr(insightface_model_module, "_default_execution_providers", lambda: ["CPUExecutionProvider"])
     monkeypatch.setattr(insightface_model_module, "_create_face_analysis_app", fake_create_face_analysis_app)
 
     model = InsightFaceModel(model_path=tmp_path / "cli-model")
 
     assert calls["resolve"] == (tmp_path / "cli-model", None)
     assert calls["validate"] == resolved_path
-    assert calls["create"] == (resolved_path, "buffalo_l", None)
+    assert calls["create"] == (resolved_path, "buffalo_l", ["CPUExecutionProvider"])
     assert persisted == [resolved_path]
     assert model.recognition_model is app.models["recognition"]
     assert app.prepare_calls == [(0, (640, 640))]
+
+
+def test_insightface_model_keeps_explicit_provider_override(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    resolved_path = tmp_path / "resolved-buffalo-l"
+    app = FakeFaceAnalysisApp()
+    calls: dict[str, object] = {}
+
+    def fake_create_face_analysis_app(model_path: Path, model_name: str, providers: list[str] | None):
+        calls["create"] = (model_path, model_name, providers)
+        return app
+
+    monkeypatch.setattr(insightface_model_module.model_config, "resolve_model_path", lambda cli_path=None, gui_path=None: resolved_path)
+    monkeypatch.setattr(insightface_model_module.model_config, "validate_model_path", lambda path: resolved_path)
+    monkeypatch.setattr(insightface_model_module.model_config, "persist_path", lambda path: None)
+    monkeypatch.setattr(insightface_model_module, "_default_execution_providers", lambda: ["CUDAExecutionProvider", "CPUExecutionProvider"])
+    monkeypatch.setattr(insightface_model_module, "_create_face_analysis_app", fake_create_face_analysis_app)
+
+    InsightFaceModel(model_path=tmp_path / "cli-model", providers=["CPUExecutionProvider"])
+
+    assert calls["create"] == (resolved_path, "buffalo_l", ["CPUExecutionProvider"])
 
 
 def test_insightface_model_does_not_persist_when_using_default_config_path(

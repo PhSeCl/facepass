@@ -97,7 +97,7 @@ threshold = 0.30
 
 后续未显式传 `--model-path` 时，后端会按 `CLI > GUI > config.toml` 的优先级解析模型路径。
 
-当前 `InsightFaceModel` 默认显式使用 `CPUExecutionProvider`，因此在没有 CUDA 版 `onnxruntime` 的机器上也能按 CPU 跑通。
+当前 `InsightFaceModel` 默认会优先尝试 `CUDAExecutionProvider`，不可用时自动回退到 `CPUExecutionProvider`。因此装好 GPU 版 `onnxruntime` 和匹配的 CUDA 环境后可以直接吃到 GPU；未配置时仍会按 CPU 跑通。
 
 健康检查：
 

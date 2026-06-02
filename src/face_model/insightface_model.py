@@ -30,10 +30,23 @@ def _l2_normalize(embedding: np.ndarray) -> np.ndarray:
     return vector / norm
 
 
+def _default_execution_providers() -> list[str]:
+    try:
+        onnxruntime_module = importlib.import_module("onnxruntime")
+        available_providers = onnxruntime_module.get_available_providers()
+    except Exception:
+        logger.warning("无法检测 onnxruntime provider，回退到 CPUExecutionProvider")
+        return ["CPUExecutionProvider"]
+
+    if "CUDAExecutionProvider" in available_providers:
+        return ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    return ["CPUExecutionProvider"]
+
+
 def _create_face_analysis_app(
     model_path: Path,
     model_name: str,
-    providers: list[str] | None,
+    providers: list[str],
 ):
     face_analysis_module = importlib.import_module("insightface.app.face_analysis")
     original_ensure_available = face_analysis_module.ensure_available
@@ -42,7 +55,7 @@ def _create_face_analysis_app(
         return face_analysis_module.FaceAnalysis(
             name=model_name,
             root=str(model_path),
-            providers=providers or ["CPUExecutionProvider"],
+            providers=providers,
         )
     finally:
         face_analysis_module.ensure_available = original_ensure_available
@@ -72,6 +85,7 @@ class InsightFaceModel(FaceModel):
     ) -> None:
         explicit_model_path = model_path is not None or gui_model_path is not None
         validated_model_path: Path | None = None
+        resolved_providers = providers or _default_execution_providers()
         try:
             resolved_model_path = model_config.resolve_model_path(
                 cli_path=model_path,
@@ -82,7 +96,7 @@ class InsightFaceModel(FaceModel):
             self.app = _create_face_analysis_app(
                 model_path=validated_model_path,
                 model_name=model_name,
-                providers=providers,
+                providers=resolved_providers,
             )
             self.app.prepare(ctx_id=0, det_size=det_size)
             self.recognition_model = next(
