@@ -67,6 +67,62 @@ def test_default_execution_providers_falls_back_to_cpu_when_cuda_is_unavailable(
     assert providers == ["CPUExecutionProvider"]
 
 
+def test_runtime_diagnostics_reports_cuda_when_provider_is_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        insightface_model_module.importlib,
+        "import_module",
+        lambda name: type(
+            "FakeOrtModule",
+            (),
+            {
+                "__version__": "9.9.9",
+                "get_available_providers": staticmethod(
+                    lambda: ["CUDAExecutionProvider", "CPUExecutionProvider"]
+                ),
+                "get_device": staticmethod(lambda: "GPU"),
+            },
+        )(),
+    )
+
+    diagnostics = insightface_model_module.get_runtime_diagnostics()
+
+    assert diagnostics["onnxruntime_version"] == "9.9.9"
+    assert diagnostics["device"] == "GPU"
+    assert diagnostics["available_providers"] == ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    assert diagnostics["preferred_providers"] == ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    assert diagnostics["gpu_enabled"] is True
+
+
+def test_runtime_diagnostics_reports_cpu_when_cuda_provider_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        insightface_model_module.importlib,
+        "import_module",
+        lambda name: type(
+            "FakeOrtModule",
+            (),
+            {
+                "__version__": "1.2.3",
+                "get_available_providers": staticmethod(
+                    lambda: ["AzureExecutionProvider", "CPUExecutionProvider"]
+                ),
+                "get_device": staticmethod(lambda: "CPU"),
+            },
+        )(),
+    )
+
+    diagnostics = insightface_model_module.get_runtime_diagnostics()
+
+    assert diagnostics["onnxruntime_version"] == "1.2.3"
+    assert diagnostics["device"] == "CPU"
+    assert diagnostics["available_providers"] == ["AzureExecutionProvider", "CPUExecutionProvider"]
+    assert diagnostics["preferred_providers"] == ["CPUExecutionProvider"]
+    assert diagnostics["gpu_enabled"] is False
+
+
 def test_insightface_model_resolves_validates_and_persists_explicit_path(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

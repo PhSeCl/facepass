@@ -43,6 +43,31 @@ def _default_execution_providers() -> list[str]:
     return ["CPUExecutionProvider"]
 
 
+def get_runtime_diagnostics() -> dict[str, object]:
+    try:
+        onnxruntime_module = importlib.import_module("onnxruntime")
+    except Exception as exc:
+        return {
+            "onnxruntime_version": None,
+            "device": None,
+            "available_providers": [],
+            "preferred_providers": ["CPUExecutionProvider"],
+            "gpu_enabled": False,
+            "error": str(exc),
+        }
+
+    available_providers = list(onnxruntime_module.get_available_providers())
+    preferred_providers = _default_execution_providers()
+    device = onnxruntime_module.get_device() if hasattr(onnxruntime_module, "get_device") else None
+    return {
+        "onnxruntime_version": getattr(onnxruntime_module, "__version__", None),
+        "device": device,
+        "available_providers": available_providers,
+        "preferred_providers": preferred_providers,
+        "gpu_enabled": "CUDAExecutionProvider" in preferred_providers,
+    }
+
+
 def _create_face_analysis_app(
     model_path: Path,
     model_name: str,

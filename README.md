@@ -37,11 +37,20 @@ tests/                  # 接口、边界和错误路径测试
 
 ## 依赖
 
-本项目使用 `uv` 管理依赖。`onnxruntime` 当前固定为 `1.22.1`，因为较新的 `1.24.x` 在本项目的 CPython 3.10 Windows 环境没有可用 wheel。
+本项目使用 `uv` 管理依赖。默认依赖固定为 CPU 版 `onnxruntime==1.22.1`，这样 CPU-only 机器、测试环境和 CI 都能直接安装运行。较新的 `1.24.x` 在本项目的 CPython 3.10 Windows 环境没有可用 wheel。
 
 ```powershell
 uv sync
 ```
+
+如果你本机已经配好了 NVIDIA 驱动、CUDA 运行时和匹配的 cuDNN，可以只在**本地当前虚拟环境**里把 ORT 切到 GPU 版，而不用改仓库默认依赖：
+
+```powershell
+uv pip uninstall onnxruntime
+uv pip install onnxruntime-gpu==1.22.1
+```
+
+这一步是可选本地增强，不应直接改成项目默认依赖，否则会降低其他同学和 CI 的可移植性。
 
 后端默认配置在 `src/backend/config.py`，当前 `model_name="insightface"`。如果只想跑不依赖权重的后端集成测试，可以在测试里把配置切到 `fake`。
 
@@ -98,6 +107,15 @@ threshold = 0.30
 后续未显式传 `--model-path` 时，后端会按 `CLI > GUI > config.toml` 的优先级解析模型路径。
 
 当前 `InsightFaceModel` 默认会优先尝试 `CUDAExecutionProvider`，不可用时自动回退到 `CPUExecutionProvider`。因此装好 GPU 版 `onnxruntime` 和匹配的 CUDA 环境后可以直接吃到 GPU；未配置时仍会按 CPU 跑通。
+
+可以用下面的脚本检查当前环境是否真的暴露了 CUDA provider；如果同时传 `--model-path`，脚本还会把已加载 ONNX session 的 provider 打出来：
+
+```powershell
+uv run python scripts/check_runtime.py
+uv run python scripts/check_runtime.py --model-path F:\InsightFace\models_cache\models\buffalo_l
+```
+
+如果输出里的 `runtime.available_providers` 和 `session_providers` 都包含 `CUDAExecutionProvider`，说明当前 FacePass 进程已经实际具备 GPU 推理能力。
 
 健康检查：
 
