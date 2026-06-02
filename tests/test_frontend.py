@@ -1,9 +1,12 @@
 import requests
 import pytest
 from PIL import Image
+from pathlib import Path
 
 from src.frontend.app import (
+    DATASET_BROWSER_ROOT,
     DATASET_EVAL_TIMEOUT,
+    demo,
     inspect_dataset_via_backend,
     _post_dataset_eval_directory,
     _post_dataset_eval,
@@ -230,6 +233,25 @@ def test_frontend_dataset_directory_inspect_posts_dataset_dir(monkeypatch, tmp_p
 
     assert observed["data"] == {"dataset_dir": str(dataset_dir)}
     assert observed["timeout"] == 5
+
+
+def test_frontend_directory_browser_defaults_to_workspace_root() -> None:
+    assert DATASET_BROWSER_ROOT == str(Path.cwd())
+
+
+def test_frontend_directory_browser_does_not_auto_inspect_on_change() -> None:
+    components = {component["id"]: component for component in demo.config["components"]}
+    directory_component_id = next(
+        component_id
+        for component_id, component in components.items()
+        if component["type"] == "fileexplorer"
+        and component["props"].get("label") == "选择数据集文件夹"
+    )
+
+    assert all(
+        not any(target == [directory_component_id, "change"] for target in dependency["targets"])
+        for dependency in demo.config["dependencies"]
+    )
 
 
 def test_frontend_dataset_eval_timeout_returns_friendly_message(monkeypatch, tmp_path) -> None:

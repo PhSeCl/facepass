@@ -12,10 +12,20 @@ from PIL import Image, ImageDraw
 BACKEND_URL = os.getenv("FACEPASS_BACKEND_URL", "http://127.0.0.1:8000")
 REQUEST_TIMEOUT = 5
 DATASET_EVAL_TIMEOUT = 60
-_dataset_browser_root = Path(os.getenv("FACEPASS_FRONTEND_FILE_ROOT", Path.cwd().anchor or str(Path.cwd())))
-DATASET_BROWSER_ROOT = str(_dataset_browser_root if _dataset_browser_root.exists() else Path.cwd())
 P = ParamSpec("P")
 R = TypeVar("R")
+
+
+def _resolve_dataset_browser_root() -> str:
+    configured = os.getenv("FACEPASS_FRONTEND_FILE_ROOT")
+    if configured:
+        candidate = Path(configured)
+        if candidate.exists():
+            return str(candidate)
+    return str(Path.cwd())
+
+
+DATASET_BROWSER_ROOT = _resolve_dataset_browser_root()
 
 
 def _with_retry(
@@ -380,11 +390,6 @@ with gr.Blocks(title="FacePass") as demo:
                 outputs=[gallery_choice, dataset_message],
             )
             archive_input.change(
-                inspect_dataset_ui,
-                inputs=[dataset_source, archive_input, directory_input],
-                outputs=[gallery_choice, dataset_message],
-            )
-            directory_input.change(
                 inspect_dataset_ui,
                 inputs=[dataset_source, archive_input, directory_input],
                 outputs=[gallery_choice, dataset_message],
