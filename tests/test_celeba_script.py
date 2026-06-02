@@ -71,12 +71,16 @@ def test_eval_celeba_parser_defaults() -> None:
 
     assert args.data_dir == "celeba_100_identities_3reg_3test"
     assert args.report_path == "reports/celeba_eval.json"
+    assert args.top1_plot_path == "reports/celeba_top1_accuracy.png"
+    assert args.per_class_plot_path == "reports/celeba_per_class_accuracy.png"
     assert args.sample_limit == 5
 
 
 def test_eval_celeba_script_runs_with_fake_model_and_writes_report(tmp_path: Path) -> None:
     data_dir = create_celeba_fixture(tmp_path)
     report_path = tmp_path / "reports" / "celeba_eval.json"
+    top1_plot_path = tmp_path / "reports" / "celeba_top1_accuracy.png"
+    per_class_plot_path = tmp_path / "reports" / "celeba_per_class_accuracy.png"
     repo_root = Path(__file__).resolve().parents[1]
 
     result = subprocess.run(
@@ -87,6 +91,10 @@ def test_eval_celeba_script_runs_with_fake_model_and_writes_report(tmp_path: Pat
             str(data_dir),
             "--report-path",
             str(report_path),
+            "--top1-plot-path",
+            str(top1_plot_path),
+            "--per-class-plot-path",
+            str(per_class_plot_path),
             "--model-name",
             "fake",
             "--sample-limit",
@@ -108,3 +116,7 @@ def test_eval_celeba_script_runs_with_fake_model_and_writes_report(tmp_path: Pat
     assert len(report["failure_samples"]) == 1
     assert report["failure_samples"][0]["true_identity_id"] == "identity_00070"
     assert report["failure_samples"][0]["predicted_identity_id"] == "identity_00212"
+    assert top1_plot_path.exists()
+    assert per_class_plot_path.exists()
+    assert "top-1 plot written to" in result.stdout
+    assert "per-class plot written to" in result.stdout

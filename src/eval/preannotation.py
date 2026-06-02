@@ -32,6 +32,44 @@ def _needs_single_person_review(path: Path, face_count: int) -> bool:
     return face_count > 1 and SINGLE_PERSON_PATTERN.fullmatch(path.stem) is not None
 
 
+def _deduplicate_registered_identities(
+    faces: list[dict[str, object]],
+    review_reasons: list[str],
+) -> None:
+    best_index_by_identity: dict[str, int] = {}
+    for index, face in enumerate(faces):
+        identity = face["identity"]
+        if not isinstance(identity, str) or identity == "unknown":
+            continue
+        score = float(face["score"])
+        current_best_index = best_index_by_identity.get(identity)
+        if current_best_index is None:
+            best_index_by_identity[identity] = index
+            continue
+        current_best_score = float(faces[current_best_index]["score"])
+        if score > current_best_score:
+            best_index_by_identity[identity] = index
+
+    duplicate_identities = [
+        identity
+        for identity in best_index_by_identity
+        if sum(1 for face in faces if face["identity"] == identity) > 1
+    ]
+    for identity in duplicate_identities:
+        best_index = best_index_by_identity[identity]
+        kept_face = faces[best_index]
+        for index, face in enumerate(faces):
+            if index == best_index or face["identity"] != identity:
+                continue
+            face["identity"] = "unknown"
+        review_reasons.append(
+            "同图存在相似人物，"
+            f"检测到多个 face 命中 {identity}；"
+            f"预标注暂保留最高分 bbox={kept_face['bbox']} score={float(kept_face['score']):.4f}，"
+            "其余同身份候选已改为 unknown，请人工核对"
+        )
+
+
 def generate_draft_annotations(
     recognizer,
     images_dir: str | Path,
@@ -89,6 +127,10 @@ def generate_draft_annotations(
                 review_reasons.append(
                     f"低置信度 bbox={list(preview.bbox)} score={preview.similarity:.4f}"
                 )
+
+        _deduplicate_registered_identities(faces, review_reasons)
+        if any("同图存在相似人物" in reason for reason in review_reasons):
+            needs_review = True
 
         face_count = len(previews)
         if face_count == 0:

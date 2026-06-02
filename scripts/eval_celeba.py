@@ -11,6 +11,7 @@ if str(ROOT_DIR) not in sys.path:
 from src.backend.gallery import Gallery
 from src.common.errors import EmptyGalleryError, InvalidImageError
 from src.eval.celeba_dataset import CelebADataset, load_celeba_dataset
+from src.eval.classification_reporting import plot_per_class_accuracy, plot_top1_accuracy
 from src.eval.evaluator import evaluate
 from src.face_model import create_model
 
@@ -26,6 +27,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--report-path",
         default="reports/celeba_eval.json",
         help="Path to the JSON report output.",
+    )
+    parser.add_argument(
+        "--top1-plot-path",
+        default="reports/celeba_top1_accuracy.png",
+        help="Path to the top-1 accuracy PNG output.",
+    )
+    parser.add_argument(
+        "--per-class-plot-path",
+        default="reports/celeba_per_class_accuracy.png",
+        help="Path to the per-class accuracy PNG output.",
     )
     parser.add_argument(
         "--model-name",
@@ -88,6 +99,11 @@ def write_report(report_path: Path, dataset: CelebADataset, report, sample_limit
     report_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def write_plots(report, top1_plot_path: Path, per_class_plot_path: Path) -> None:
+    plot_top1_accuracy(report.metrics, top1_plot_path)
+    plot_per_class_accuracy(report.metrics, per_class_plot_path)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
@@ -102,6 +118,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         report_path = Path(args.report_path)
         write_report(report_path, dataset, report, args.sample_limit)
+        write_plots(report, Path(args.top1_plot_path), Path(args.per_class_plot_path))
     except (EmptyGalleryError, FileNotFoundError, InvalidImageError, ImportError, RuntimeError, ValueError) as exc:
         print(f"CelebA 评测失败: {exc}")
         return 1
@@ -126,6 +143,8 @@ def main(argv: list[str] | None = None) -> int:
                 f"(sim={item['similarity']:.4f})"
             )
     print(f"report written to: {args.report_path}")
+    print(f"top-1 plot written to: {args.top1_plot_path}")
+    print(f"per-class plot written to: {args.per_class_plot_path}")
     return 0
 
 

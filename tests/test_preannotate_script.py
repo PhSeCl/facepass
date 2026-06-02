@@ -76,6 +76,21 @@ class ScenarioModel:
                     landmarks=None,
                 ),
             ]
+        if blue < 20 and green > 200 and red > 100:
+            return [
+                DetectedFace(
+                    bbox=(20, 20, 30, 30),
+                    embedding=unit([0.95, 0.3122499, 0.0]),
+                    det_score=0.9,
+                    landmarks=None,
+                ),
+                DetectedFace(
+                    bbox=(60, 20, 30, 30),
+                    embedding=unit([0.80, 0.60, 0.0]),
+                    det_score=0.85,
+                    landmarks=None,
+                ),
+            ]
         if blue == green == red:
             return []
         raise AssertionError(f"unexpected image signature: {(blue, green, red)}")
@@ -96,6 +111,7 @@ def test_generate_draft_annotations_writes_scores_and_review_warnings(
     write_image(images_dir / "p02_t02.jpg", np.full((8, 8, 3), (0, 255, 255), dtype=np.uint8))
     write_image(images_dir / "p04_t04.jpg", np.full((8, 8, 3), (0, 0, 255), dtype=np.uint8))
     write_image(images_dir / "p03_t03.jpg", np.full((8, 8, 3), (255, 0, 255), dtype=np.uint8))
+    write_image(images_dir / "group_dup.jpg", np.full((8, 8, 3), (120, 255, 0), dtype=np.uint8))
     write_image(images_dir / "group_01.jpg", np.full((8, 8, 3), (128, 128, 128), dtype=np.uint8))
 
     gallery = Gallery()
@@ -127,22 +143,29 @@ def test_generate_draft_annotations_writes_scores_and_review_warnings(
     assert payload["p04_t04.jpg"] == [{"bbox": [9, 10, 11, 12], "identity": "unknown", "score": pytest.approx(0.2, abs=1e-3)}]
     assert payload["p03_t03.jpg"][0]["identity"] == "p01"
     assert payload["p03_t03.jpg"][1]["identity"] == "p02"
+    assert payload["group_dup.jpg"] == [
+        {"bbox": [20, 20, 30, 30], "identity": "p01", "score": pytest.approx(0.95, abs=1e-3)},
+        {"bbox": [60, 20, 30, 30], "identity": "unknown", "score": pytest.approx(0.8, abs=1e-3)},
+    ]
     assert payload["group_01.jpg"] == []
     assert [item.image_path.name for item in dataset.images] == [
         "group_01.jpg",
+        "group_dup.jpg",
         "p01_t01.jpg",
         "p02_t02.jpg",
         "p03_t03.jpg",
         "p04_t04.jpg",
     ]
-    assert summary.processed_images == 5
-    assert summary.total_faces == 5
-    assert summary.review_images == 4
+    assert summary.processed_images == 6
+    assert summary.total_faces == 7
+    assert summary.review_images == 5
     assert "p02_t02.jpg" in caplog.text
     assert "p04_t04.jpg" in caplog.text
     assert "低置信度" in caplog.text
     assert "p03_t03.jpg" in caplog.text
     assert "单人照检出多脸" in caplog.text
+    assert "group_dup.jpg" in caplog.text
+    assert "同图存在相似人物" in caplog.text
     assert "group_01.jpg" in caplog.text
     assert "未检出人脸" in caplog.text
 
