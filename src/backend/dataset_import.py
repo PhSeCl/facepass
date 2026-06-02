@@ -8,6 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from src.common.errors import FacePassError
+from src.eval.end2end_dataset import GroupedSelfDataset, load_grouped_self_dataset
+from src.eval.end2end_evaluator import EndToEndEvalReport, evaluate_end2end
+from src.face_model.base import FaceModel
 
 
 ANNOTATION_FILENAMES = (
@@ -34,6 +37,21 @@ class ExtractedDatasetArchive:
     annotation_path: Path
     annotation_format: str
     registered_dir: Path | None
+
+
+@dataclass(frozen=True)
+class DetectionIssue:
+    image_name: str
+    bbox: tuple[int, int, int, int]
+
+
+@dataclass(frozen=True)
+class ExternalEvalResult:
+    gallery_source: str
+    report: EndToEndEvalReport
+    confusion_pairs: list[tuple[str, str]]
+    missed_detections: list[DetectionIssue]
+    false_positives: list[DetectionIssue]
 
 
 def _find_7z_executable() -> str | None:
@@ -146,3 +164,83 @@ def extract_dataset_archive(archive_path: str | Path) -> ExtractedDatasetArchive
     except Exception:
         shutil.rmtree(extracted_root, ignore_errors=True)
         raise
+
+
+def _resolve_registered_root(
+    extracted: ExtractedDatasetArchive,
+    gallery_choice: str,
+    local_registered_root: Path,
+) -> tuple[str, Path]:
+    normalized_choice = gallery_choice.lower()
+    if normalized_choice not in {"local", "archive"}:
+        raise ValueError(f"unsupported gallery choice: {gallery_choice}")
+    if normalized_choice == "archive" and extracted.registered_dir is not None:
+        return "archive", extracted.registered_dir
+    return "local", local_registered_root
+
+
+def _with_registered_root(dataset: GroupedSelfDataset, registered_root: Path) -> GroupedSelfDataset:
+    return GroupedSelfDataset(
+        registered_root=registered_root,
+        test_root=dataset.test_root,
+        images=dataset.images,
+    )
+
+
+def _collect_detection_issues(report: EndToEndEvalReport, dataset: GroupedSelfDataset) -> tuple[list[DetectionIssue], list[DetectionIssue]]:
+    missed_detections: list[DetectionIssue] = []
+    false_positives: list[DetectionIssue] = []
+
+    for image_result, sample in zip(report.image_results, dataset.images):
+        for ground_truth_index in image_result.unmatched_ground_truth_indices:
+            missed_detections.append(
+                DetectionIssue(
+                    image_name=sample.image_path.name,
+                    bbox=image_result.ground_truths[ground_truth_index].bbox,
+                )
+            )
+        for prediction_index in image_result.unmatched_prediction_indices:
+            false_positives.append(
+                DetectionIssue(
+                    image_name=sample.image_path.name,
+                    bbox=image_result.predictions[prediction_index].bbox,
+                )
+            )
+    return missed_detections, false_positives
+
+
+def run_external_eval(
+    zip_path: str | Path,
+    gallery_choice: str,
+    *,
+    model: FaceModel,
+    threshold: float,
+    local_registered_root: str | Path,
+) -> ExternalEvalResult:
+    extracted_root: Path | None = None
+    try:
+        extracted = extract_dataset_archive(zip_path)
+        extracted_root = extracted.extracted_root
+        gallery_source, registered_root = _resolve_registered_root(
+            extracted,
+            gallery_choice,
+            Path(local_registered_root),
+        )
+        dataset = load_grouped_self_dataset(
+            annotations_path=extracted.annotation_path,
+            test_root=extracted.dataset_root,
+            registered_root=registered_root,
+        )
+        dataset = _with_registered_root(dataset, registered_root)
+        report = evaluate_end2end(dataset=dataset, model=model, threshold=threshold)
+        missed_detections, false_positives = _collect_detection_issues(report, dataset)
+        return ExternalEvalResult(
+            gallery_source=gallery_source,
+            report=report,
+            confusion_pairs=report.metrics.confusion_pairs,
+            missed_detections=missed_detections,
+            false_positives=false_positives,
+        )
+    finally:
+        if extracted_root is not None:
+            shutil.rmtree(extracted_root, ignore_errors=True)
