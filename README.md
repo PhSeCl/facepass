@@ -21,8 +21,9 @@ scripts/
 |-- analyze_threshold.py # 注册集相似度分布与阈值分析
 `-- eval_end2end.py      # 多脸端到端评测与出图
 dataset/
-|-- registered/          # 真实注册集：p01..p20 注册照目录，本地放置，不进 git
-`-- test/                # 真实测试集与标注，本地放置，不进 git
+|-- identities.csv       # 身份 ID 到显示名映射，已纳入版本控制
+|-- registered/          # 真实注册集：p01..p20 注册照目录，已纳入版本控制
+`-- test/                # 自采测试图与标注目录，测试图已纳入版本控制
 data/
 |-- registered/          # 占位目录，仅保留 .gitkeep
 |-- test/                # 占位目录，仅保留 .gitkeep
@@ -62,6 +63,13 @@ uv run uvicorn src.backend.api:app --port 8000
 # 另开终端启动前端
 uv run python src/frontend/app.py
 ```
+
+`run_dev.py` 会同时启动：
+
+- FastAPI 后端：`http://127.0.0.1:8000`
+- Gradio 前端：`http://127.0.0.1:7860`
+
+浏览器应打开 `7860`。`8000` 只提供 API，所以直接访问 `GET /` 或请求 `/favicon.ico` 返回 `404` 是预期行为，不代表后端启动失败。
 
 如果路径校验通过，显式传入的模型目录会被写入项目根的 `config.toml`。TOML 里建议使用正斜杠：
 
@@ -121,7 +129,7 @@ curl http://127.0.0.1:8000/health
 
 目录约定需要特别说明：
 
-- `dataset/`：真实实验数据目录。当前实际使用的是 `dataset/registered` 和 `dataset/test`。
+- `dataset/`：真实实验数据目录，当前已纳入版本控制；其中 `dataset/registered` 已准备完毕，`dataset/test` 当前主要包含测试图。
 - `data/`：仓库内测试与脚本 fixture 目录，主要放临时合成样本和 `.gitkeep`，不是正式数据集根目录。
 
 目前仓库内有三类相关入口：
@@ -176,6 +184,11 @@ uv run python scripts/eval_end2end.py `
 
 如果本机还没有准备 `dataset/test` 标注或 `dataset/registered` 注册集，`eval_end2end.py` 会打印提示并直接退出，不会抛异常。
 
+启动建库时的几个常见 warning 目前属于预期行为：
+
+- 某张注册图检测到多张人脸时，系统会记录 warning，并使用面积最大的一张做人脸注册。
+- 图片像素总数超过 `25_000_000` 时，`safe_load_image` 会拒绝加载并跳过该图，日志里会显示“图片尺寸过大”。
+
 ## 错误处理
 
 错误按三档处理：
@@ -190,7 +203,6 @@ uv run python scripts/eval_end2end.py `
 
 - `models/`
 - `data/`
-- `dataset/`
 - `*.onnx`
 - `*.pkl`
 - `*.npy`
@@ -198,6 +210,8 @@ uv run python scripts/eval_end2end.py `
 - Python 缓存和日志
 
 当前约定是：模型目录由使用者自行下载并放在本地任意位置，再通过 `--model-path`、`FACEPASS_MODEL_PATH` 或 `config.toml` 指定。项目本身不负责下载、不依赖 Hugging Face 托管，也不会把模型目录纳入 git。
+
+`dataset/` 与上述模型产物不同：当前仓库已经提交了 `dataset/identities.csv`、`dataset/registered/` 和部分 `dataset/test/` 图片。
 
 ## 测试
 
@@ -221,7 +235,7 @@ uv run pytest tests -q
 
 ## 待填项
 
-- 收集并放置真实 `dataset/registered/p01` 到 `p20` 注册照。
+- 补齐 `dataset/test/annotations.jsonl`，让自采评测脚本可以直接按默认参数运行。
 - 基于注册集内部相似度分布确定最终 unknown 阈值，不能用测试集调参。
 - 最终提交前按课程要求补充打包脚本和报告。
 
