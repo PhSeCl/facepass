@@ -239,6 +239,22 @@ def test_frontend_directory_browser_defaults_to_workspace_root() -> None:
     assert DATASET_BROWSER_ROOT == str(Path.cwd())
 
 
+def test_frontend_directory_browser_is_visible_without_source_toggle() -> None:
+    components = {component["id"]: component for component in demo.config["components"]}
+    directory_component = next(
+        component
+        for component in components.values()
+        if component["type"] == "fileexplorer"
+        and component["props"].get("label") == "选择数据集文件夹"
+    )
+
+    assert directory_component["props"]["visible"] is True
+    assert not any(
+        component["type"] == "radio" and component["props"].get("label") == "输入来源"
+        for component in components.values()
+    )
+
+
 def test_frontend_directory_browser_does_not_auto_inspect_on_change() -> None:
     components = {component["id"]: component for component in demo.config["components"]}
     directory_component_id = next(

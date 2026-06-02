@@ -315,27 +315,6 @@ with gr.Blocks(title="FacePass") as demo:
                 outputs=[annotated_output, table_output, message],
             )
         with gr.Tab("数据集演示"):
-            dataset_source = gr.Radio(
-                choices=[("ZIP", "zip"), ("文件夹", "directory")],
-                value="zip",
-                label="输入来源",
-            )
-            archive_input = gr.File(label="上传 test.zip", file_types=[".zip"], type="filepath", visible=True)
-            directory_input = gr.FileExplorer(
-                label="选择数据集文件夹",
-                root_dir=DATASET_BROWSER_ROOT,
-                file_count="single",
-                visible=False,
-                height=320,
-            )
-            inspect_button = gr.Button("检查底库来源", variant="secondary")
-            gallery_choice = gr.Radio(
-                choices=[("本组底库", "local"), ("zip 内底库", "archive")],
-                value="local",
-                label="底库来源",
-                visible=False,
-            )
-            evaluate_button = gr.Button("运行数据集评测", variant="primary")
             dataset_message = gr.Markdown()
             summary_output = gr.Markdown(label="评测摘要")
             confusion_output = gr.HTML(label="混淆矩阵")
@@ -351,14 +330,6 @@ with gr.Blocks(title="FacePass") as demo:
                 datatype=["str", "str"],
                 label="误检明细",
             )
-
-            def on_dataset_source_change(source_mode: str):
-                return (
-                    gr.update(visible=source_mode == "zip", value=None),
-                    gr.update(visible=source_mode == "directory", value=None),
-                    gr.update(visible=False, value="local"),
-                    "",
-                )
 
             def inspect_dataset_ui(source_mode: str, archive_path: str | None, directory_path: str | None):
                 has_registered, info = inspect_dataset_via_backend(
@@ -379,34 +350,80 @@ with gr.Blocks(title="FacePass") as demo:
                     source_mode=source_mode,
                 )
 
-            dataset_source.change(
-                on_dataset_source_change,
-                inputs=dataset_source,
-                outputs=[archive_input, directory_input, gallery_choice, dataset_message],
-            )
-            inspect_button.click(
-                inspect_dataset_ui,
-                inputs=[dataset_source, archive_input, directory_input],
-                outputs=[gallery_choice, dataset_message],
-            )
-            archive_input.change(
-                inspect_dataset_ui,
-                inputs=[dataset_source, archive_input, directory_input],
-                outputs=[gallery_choice, dataset_message],
-            )
-            evaluate_button.click(
-                run_dataset_eval_ui,
-                inputs=[dataset_source, archive_input, directory_input, gallery_choice],
-                outputs=[
-                    summary_output,
-                    confusion_output,
-                    detection_output,
-                    accuracy_output,
-                    missed_output,
-                    false_output,
-                    dataset_message,
-                ],
-            )
+            with gr.Tab("ZIP"):
+                archive_input = gr.File(label="上传 test.zip", file_types=[".zip"], type="filepath")
+                zip_inspect_button = gr.Button("检查底库来源", variant="secondary")
+                zip_gallery_choice = gr.Radio(
+                    choices=[("本组底库", "local"), ("zip 内底库", "archive")],
+                    value="local",
+                    label="底库来源",
+                    visible=False,
+                )
+                zip_evaluate_button = gr.Button("运行数据集评测", variant="primary")
+
+                zip_inspect_button.click(
+                    lambda archive_path: inspect_dataset_ui("zip", archive_path, None),
+                    inputs=archive_input,
+                    outputs=[zip_gallery_choice, dataset_message],
+                )
+                archive_input.change(
+                    lambda archive_path: inspect_dataset_ui("zip", archive_path, None),
+                    inputs=archive_input,
+                    outputs=[zip_gallery_choice, dataset_message],
+                )
+                zip_evaluate_button.click(
+                    lambda archive_path, gallery_choice: run_dataset_eval_ui(
+                        "zip", archive_path, None, gallery_choice
+                    ),
+                    inputs=[archive_input, zip_gallery_choice],
+                    outputs=[
+                        summary_output,
+                        confusion_output,
+                        detection_output,
+                        accuracy_output,
+                        missed_output,
+                        false_output,
+                        dataset_message,
+                    ],
+                )
+
+            with gr.Tab("文件夹"):
+                directory_input = gr.FileExplorer(
+                    label="选择数据集文件夹",
+                    root_dir=DATASET_BROWSER_ROOT,
+                    file_count="single",
+                    visible=True,
+                    height=320,
+                )
+                directory_inspect_button = gr.Button("检查底库来源", variant="secondary")
+                directory_gallery_choice = gr.Radio(
+                    choices=[("本组底库", "local"), ("文件夹内底库", "archive")],
+                    value="local",
+                    label="底库来源",
+                    visible=False,
+                )
+                directory_evaluate_button = gr.Button("运行数据集评测", variant="primary")
+
+                directory_inspect_button.click(
+                    lambda directory_path: inspect_dataset_ui("directory", None, directory_path),
+                    inputs=directory_input,
+                    outputs=[directory_gallery_choice, dataset_message],
+                )
+                directory_evaluate_button.click(
+                    lambda directory_path, gallery_choice: run_dataset_eval_ui(
+                        "directory", None, directory_path, gallery_choice
+                    ),
+                    inputs=[directory_input, directory_gallery_choice],
+                    outputs=[
+                        summary_output,
+                        confusion_output,
+                        detection_output,
+                        accuracy_output,
+                        missed_output,
+                        false_output,
+                        dataset_message,
+                    ],
+                )
     with gr.Tab("身份库"):
         refresh = gr.Button("刷新身份库")
         identities_table = gr.Dataframe(
