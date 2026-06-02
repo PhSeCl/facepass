@@ -123,6 +123,48 @@ def test_runtime_diagnostics_reports_cpu_when_cuda_provider_is_unavailable(
     assert diagnostics["gpu_enabled"] is False
 
 
+def test_maybe_preload_gpu_dlls_loads_cuda_runtime_when_cuda_provider_is_selected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[bool, bool, bool, object]] = []
+
+    monkeypatch.setattr(
+        insightface_model_module.importlib,
+        "import_module",
+        lambda name: type(
+            "FakeOrtModule",
+            (),
+            {
+                "preload_dlls": staticmethod(
+                    lambda cuda=True, cudnn=True, msvc=True, directory=None: calls.append(
+                        (cuda, cudnn, msvc, directory)
+                    )
+                )
+            },
+        )(),
+    )
+
+    insightface_model_module._maybe_preload_gpu_dlls(["CUDAExecutionProvider", "CPUExecutionProvider"])
+
+    assert calls == [(True, True, True, "")]
+
+
+def test_maybe_preload_gpu_dlls_skips_preload_when_cuda_provider_is_not_selected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    imported: list[str] = []
+
+    def fake_import(name: str):
+        imported.append(name)
+        raise AssertionError("onnxruntime import should not happen")
+
+    monkeypatch.setattr(insightface_model_module.importlib, "import_module", fake_import)
+
+    insightface_model_module._maybe_preload_gpu_dlls(["CPUExecutionProvider"])
+
+    assert imported == []
+
+
 def test_insightface_model_resolves_validates_and_persists_explicit_path(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

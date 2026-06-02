@@ -68,11 +68,35 @@ def get_runtime_diagnostics() -> dict[str, object]:
     }
 
 
+def _maybe_preload_gpu_dlls(providers: list[str]) -> None:
+    if "CUDAExecutionProvider" not in providers:
+        return
+
+    try:
+        onnxruntime_module = importlib.import_module("onnxruntime")
+    except Exception as exc:
+        logger.warning("CUDA provider 已选中，但导入 onnxruntime 失败，跳过 GPU DLL 预加载: %s", exc)
+        return
+
+    preload_dlls = getattr(onnxruntime_module, "preload_dlls", None)
+    if preload_dlls is None:
+        logger.warning("当前 onnxruntime 不支持 preload_dlls，跳过 GPU DLL 预加载")
+        return
+
+    try:
+        # Empty string tells onnxruntime to search NVIDIA site-packages first,
+        # then fall back to its default DLL lookup order.
+        preload_dlls(directory="")
+    except Exception as exc:
+        logger.warning("GPU DLL 预加载失败，后续将由 onnxruntime 自行解析 provider: %s", exc)
+
+
 def _create_face_analysis_app(
     model_path: Path,
     model_name: str,
     providers: list[str],
 ):
+    _maybe_preload_gpu_dlls(providers)
     face_analysis_module = importlib.import_module("insightface.app.face_analysis")
     original_ensure_available = face_analysis_module.ensure_available
     face_analysis_module.ensure_available = lambda sub_dir, name, root="~/.insightface": str(model_path)

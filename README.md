@@ -43,11 +43,11 @@ tests/                  # 接口、边界和错误路径测试
 uv sync
 ```
 
-如果你本机已经配好了 NVIDIA 驱动、CUDA 运行时和匹配的 cuDNN，可以只在**本地当前虚拟环境**里把 ORT 切到 GPU 版，而不用改仓库默认依赖：
+如果你本机已经配好了 NVIDIA 驱动，可以只在**本地当前虚拟环境**里把 ORT 切到 GPU 版，而不用改仓库默认依赖。Windows 上建议把 ORT 和它依赖的 CUDA/cuDNN Python 运行库一起装进 `.venv`：
 
 ```powershell
 uv pip uninstall onnxruntime
-uv pip install onnxruntime-gpu
+uv pip install "onnxruntime-gpu[cuda,cudnn]"
 ```
 
 这一步是可选本地增强，不应直接改成项目默认依赖，否则会降低其他同学和 CI 的可移植性。不同 Python / Windows 组合下可用的 GPU wheel 版本可能不同，安装后请立刻用下面的诊断脚本确认 provider 是否真的起来。
@@ -116,6 +116,15 @@ uv run python scripts/check_runtime.py --model-path F:\InsightFace\models_cache\
 ```
 
 如果输出里的 `runtime.available_providers` 和 `session_providers` 都包含 `CUDAExecutionProvider`，说明当前 FacePass 进程已经实际具备 GPU 推理能力。
+
+如果你已经按上面的方式把 `.venv` 切到了 GPU 版 ORT，就不要再直接用会自动按锁文件回同步的默认 `uv run` 工作流；请改用当前虚拟环境里的解释器：
+
+```powershell
+.\.venv\Scripts\python.exe scripts/check_runtime.py --model-path F:\InsightFace\models_cache\models\buffalo_l
+.\.venv\Scripts\python.exe scripts/run_dev.py --model-path F:\InsightFace\models_cache\models\buffalo_l
+```
+
+`InsightFaceModel` 在选择 `CUDAExecutionProvider` 时会先调用 `onnxruntime.preload_dlls(directory="")`，优先从 Python site-packages 里预加载 NVIDIA DLL，再创建 ONNX session；这样可以减少手工改系统 `PATH` 的需求，同时保持 CPU-only 默认安装不受影响。
 
 健康检查：
 
