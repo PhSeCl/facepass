@@ -20,6 +20,7 @@ ANNOTATION_FILENAMES = (
     "annotations.json",
     "annotations.jsonl",
 )
+REGISTERED_DIR_NAMES = ("registered", "register")
 
 
 class DatasetArchiveError(FacePassError):
@@ -54,6 +55,16 @@ class ExternalEvalResult:
     confusion_pairs: list[tuple[str, str]]
     missed_detections: list[DetectionIssue]
     false_positives: list[DetectionIssue]
+
+
+@dataclass(frozen=True)
+class LocalDatasetDirectory:
+    selected_root: Path
+    dataset_root: Path
+    images_dir: Path
+    annotation_path: Path
+    annotation_format: str
+    registered_dir: Path | None
 
 
 def _find_7z_executable() -> str | None:
@@ -116,6 +127,15 @@ def _extract_with_zipfile(zip_path: Path, destination: Path) -> None:
         raise DatasetArchiveError("压缩包无法解压,可能已损坏") from exc
 
 
+def _find_registered_dir(candidate_root: Path, search_root: Path) -> Path | None:
+    for base in (candidate_root, candidate_root.parent, search_root):
+        for directory_name in REGISTERED_DIR_NAMES:
+            candidate = base / directory_name
+            if candidate.is_dir():
+                return candidate
+    return None
+
+
 def _locate_dataset_root(extracted_root: Path) -> ExtractedDatasetArchive:
     candidates: list[ExtractedDatasetArchive] = []
     search_roots = [extracted_root, *sorted((path for path in extracted_root.rglob("*") if path.is_dir()), key=lambda p: len(p.parts))]
@@ -137,7 +157,7 @@ def _locate_dataset_root(extracted_root: Path) -> ExtractedDatasetArchive:
                 images_dir=images_dir,
                 annotation_path=annotation_path,
                 annotation_format=annotation_path.suffix.lstrip("."),
-                registered_dir=(candidate_root / "registered") if (candidate_root / "registered").is_dir() else None,
+                registered_dir=_find_registered_dir(candidate_root, extracted_root),
             )
         )
 
@@ -179,16 +199,39 @@ def inspect_external_dataset_archive(archive_path: str | Path) -> bool:
             shutil.rmtree(extracted_root, ignore_errors=True)
 
 
+def locate_external_dataset_directory(root: str | Path) -> LocalDatasetDirectory:
+    selected_root = Path(root)
+    if not selected_root.exists():
+        raise FileNotFoundError(f"数据集目录不存在: {selected_root}")
+    if not selected_root.is_dir():
+        raise DatasetLayoutError(f"选择的路径不是目录: {selected_root}")
+
+    located = _locate_dataset_root(selected_root)
+    return LocalDatasetDirectory(
+        selected_root=selected_root,
+        dataset_root=located.dataset_root,
+        images_dir=located.images_dir,
+        annotation_path=located.annotation_path,
+        annotation_format=located.annotation_format,
+        registered_dir=located.registered_dir,
+    )
+
+
+def inspect_external_dataset_directory(root: str | Path) -> bool:
+    located = locate_external_dataset_directory(root)
+    return located.registered_dir is not None
+
+
 def _resolve_registered_root(
-    extracted: ExtractedDatasetArchive,
+    registered_dir: Path | None,
     gallery_choice: str,
     local_registered_root: Path,
 ) -> tuple[str, Path]:
     normalized_choice = gallery_choice.lower()
     if normalized_choice not in {"local", "archive"}:
         raise ValueError(f"unsupported gallery choice: {gallery_choice}")
-    if normalized_choice == "archive" and extracted.registered_dir is not None:
-        return "archive", extracted.registered_dir
+    if normalized_choice == "archive" and registered_dir is not None:
+        return "archive", registered_dir
     return "local", local_registered_root
 
 
@@ -236,7 +279,7 @@ def run_external_eval(
         extracted = extract_dataset_archive(zip_path)
         extracted_root = extracted.extracted_root
         gallery_source, registered_root = _resolve_registered_root(
-            extracted,
+            extracted.registered_dir,
             gallery_choice,
             Path(local_registered_root),
         )
@@ -264,3 +307,41 @@ def run_external_eval(
     finally:
         if extracted_root is not None:
             shutil.rmtree(extracted_root, ignore_errors=True)
+
+
+def run_external_eval_from_directory(
+    dataset_dir: str | Path,
+    gallery_choice: str,
+    *,
+    model: FaceModel,
+    threshold: float,
+    local_registered_root: str | Path,
+    local_gallery: Gallery | None = None,
+) -> ExternalEvalResult:
+    located = locate_external_dataset_directory(dataset_dir)
+    gallery_source, registered_root = _resolve_registered_root(
+        located.registered_dir,
+        gallery_choice,
+        Path(local_registered_root),
+    )
+    dataset = load_grouped_self_dataset(
+        annotations_path=located.annotation_path,
+        test_root=located.dataset_root,
+        registered_root=registered_root,
+    )
+    dataset = _with_registered_root(dataset, registered_root)
+    report = evaluate_end2end(
+        dataset=dataset,
+        model=model,
+        threshold=threshold,
+        gallery=local_gallery if gallery_source == "local" else None,
+    )
+    missed_detections, false_positives = _collect_detection_issues(report, dataset)
+    return ExternalEvalResult(
+        gallery_source=gallery_source,
+        dataset=dataset,
+        report=report,
+        confusion_pairs=report.metrics.confusion_pairs,
+        missed_detections=missed_detections,
+        false_positives=false_positives,
+    )

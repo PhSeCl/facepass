@@ -12,6 +12,8 @@ from PIL import Image, ImageDraw
 BACKEND_URL = os.getenv("FACEPASS_BACKEND_URL", "http://127.0.0.1:8000")
 REQUEST_TIMEOUT = 5
 DATASET_EVAL_TIMEOUT = 60
+_dataset_browser_root = Path(os.getenv("FACEPASS_FRONTEND_FILE_ROOT", Path.cwd().anchor or str(Path.cwd())))
+DATASET_BROWSER_ROOT = str(_dataset_browser_root if _dataset_browser_root.exists() else Path.cwd())
 P = ParamSpec("P")
 R = TypeVar("R")
 
@@ -83,6 +85,19 @@ def _post_dataset_inspect(path: str, backend_url: str) -> requests.Response:
         )
 
 
+@_with_retry(
+    max_attempts=3,
+    base_delay=0.5,
+    exceptions=(requests.ConnectionError, requests.Timeout),
+)
+def _post_dataset_inspect_directory(path: str, backend_url: str) -> requests.Response:
+    return requests.post(
+        f"{backend_url.rstrip('/')}/dataset-eval/inspect",
+        data={"dataset_dir": path},
+        timeout=REQUEST_TIMEOUT,
+    )
+
+
 def _post_dataset_eval(path: str, gallery_choice: str, backend_url: str) -> requests.Response:
     with open(path, "rb") as handle:
         return requests.post(
@@ -91,6 +106,14 @@ def _post_dataset_eval(path: str, gallery_choice: str, backend_url: str) -> requ
             files={"file": (Path(path).name, handle, "application/zip")},
             timeout=DATASET_EVAL_TIMEOUT,
         )
+
+
+def _post_dataset_eval_directory(path: str, gallery_choice: str, backend_url: str) -> requests.Response:
+    return requests.post(
+        f"{backend_url.rstrip('/')}/dataset-eval/run",
+        data={"gallery_choice": gallery_choice, "dataset_dir": path},
+        timeout=DATASET_EVAL_TIMEOUT,
+    )
 
 
 def _draw_results(image_path: str, results: list[dict]) -> Image.Image:
@@ -168,11 +191,22 @@ def recognize_via_backend(image_path: str | None, backend_url: str = BACKEND_URL
     return _draw_results(image_path, results), rows, ""
 
 
-def inspect_dataset_via_backend(archive_path: str | None, backend_url: str = BACKEND_URL) -> tuple[bool, str]:
-    if not archive_path:
+def inspect_dataset_via_backend(
+    dataset_path: str | None,
+    source_mode: str = "zip",
+    backend_url: str = BACKEND_URL,
+) -> tuple[bool, str]:
+    if not dataset_path:
+        if source_mode == "directory":
+            return False, "请先选择一个数据集文件夹"
         return False, "请先上传一个 test.zip"
+    if source_mode == "directory" and not Path(dataset_path).is_dir():
+        return False, "请选择文件夹，不要选择具体文件"
     try:
-        response = _post_dataset_inspect(archive_path, backend_url)
+        if source_mode == "directory":
+            response = _post_dataset_inspect_directory(dataset_path, backend_url)
+        else:
+            response = _post_dataset_inspect(dataset_path, backend_url)
     except (requests.ConnectionError, requests.Timeout):
         return False, "后端未启动，请先按 README 启动 uvicorn 服务"
 
@@ -185,19 +219,31 @@ def inspect_dataset_via_backend(archive_path: str | None, backend_url: str = BAC
 
     has_registered = bool(response.json().get("has_registered"))
     if has_registered:
+        if source_mode == "directory":
+            return True, "检测到文件夹内含 `registered/`，请选择使用本组底库还是文件夹内底库。"
         return True, "检测到 zip 内含 `registered/`，请选择使用本组底库还是 zip 内底库。"
+    if source_mode == "directory":
+        return False, "文件夹内未检测到 `registered/`，将直接使用本组底库。"
     return False, "zip 内未检测到 `registered/`，将直接使用本组底库。"
 
 
 def run_dataset_eval_via_backend(
-    archive_path: str | None,
+    dataset_path: str | None,
     gallery_choice: str,
+    source_mode: str = "zip",
     backend_url: str = BACKEND_URL,
 ):
-    if not archive_path:
+    if not dataset_path:
+        if source_mode == "directory":
+            return "", "", "", "", [], [], "请先选择一个数据集文件夹"
         return "", "", "", "", [], [], "请先上传一个 test.zip"
+    if source_mode == "directory" and not Path(dataset_path).is_dir():
+        return "", "", "", "", [], [], "请选择文件夹，不要选择具体文件"
     try:
-        response = _post_dataset_eval(archive_path, gallery_choice, backend_url)
+        if source_mode == "directory":
+            response = _post_dataset_eval_directory(dataset_path, gallery_choice, backend_url)
+        else:
+            response = _post_dataset_eval(dataset_path, gallery_choice, backend_url)
     except requests.Timeout:
         return "", "", "", "", [], [], "数据集评测超时，请稍后重试或检查后端日志"
     except requests.ConnectionError:
@@ -221,6 +267,12 @@ def run_dataset_eval_via_backend(
         _format_bbox_rows(payload.get("false_positives", [])),
         "",
     )
+
+
+def _selected_dataset_path(source_mode: str, archive_path: str | None, directory_path: str | None) -> str | None:
+    if source_mode == "directory":
+        return directory_path
+    return archive_path
 
 
 def load_identities(backend_url: str = BACKEND_URL):
@@ -253,7 +305,19 @@ with gr.Blocks(title="FacePass") as demo:
                 outputs=[annotated_output, table_output, message],
             )
         with gr.Tab("数据集演示"):
-            archive_input = gr.File(label="上传 test.zip", file_types=[".zip"], type="filepath")
+            dataset_source = gr.Radio(
+                choices=[("ZIP", "zip"), ("文件夹", "directory")],
+                value="zip",
+                label="输入来源",
+            )
+            archive_input = gr.File(label="上传 test.zip", file_types=[".zip"], type="filepath", visible=True)
+            directory_input = gr.FileExplorer(
+                label="选择数据集文件夹",
+                root_dir=DATASET_BROWSER_ROOT,
+                file_count="single",
+                visible=False,
+                height=320,
+            )
             inspect_button = gr.Button("检查底库来源", variant="secondary")
             gallery_choice = gr.Radio(
                 choices=[("本组底库", "local"), ("zip 内底库", "archive")],
@@ -278,23 +342,56 @@ with gr.Blocks(title="FacePass") as demo:
                 label="误检明细",
             )
 
-            def inspect_dataset_ui(archive_path: str | None):
-                has_registered, info = inspect_dataset_via_backend(archive_path)
+            def on_dataset_source_change(source_mode: str):
+                return (
+                    gr.update(visible=source_mode == "zip", value=None),
+                    gr.update(visible=source_mode == "directory", value=None),
+                    gr.update(visible=False, value="local"),
+                    "",
+                )
+
+            def inspect_dataset_ui(source_mode: str, archive_path: str | None, directory_path: str | None):
+                has_registered, info = inspect_dataset_via_backend(
+                    _selected_dataset_path(source_mode, archive_path, directory_path),
+                    source_mode=source_mode,
+                )
                 return gr.update(visible=has_registered, value="local"), info
 
+            def run_dataset_eval_ui(
+                source_mode: str,
+                archive_path: str | None,
+                directory_path: str | None,
+                gallery_choice: str,
+            ):
+                return run_dataset_eval_via_backend(
+                    _selected_dataset_path(source_mode, archive_path, directory_path),
+                    gallery_choice,
+                    source_mode=source_mode,
+                )
+
+            dataset_source.change(
+                on_dataset_source_change,
+                inputs=dataset_source,
+                outputs=[archive_input, directory_input, gallery_choice, dataset_message],
+            )
             inspect_button.click(
                 inspect_dataset_ui,
-                inputs=archive_input,
+                inputs=[dataset_source, archive_input, directory_input],
                 outputs=[gallery_choice, dataset_message],
             )
             archive_input.change(
                 inspect_dataset_ui,
-                inputs=archive_input,
+                inputs=[dataset_source, archive_input, directory_input],
+                outputs=[gallery_choice, dataset_message],
+            )
+            directory_input.change(
+                inspect_dataset_ui,
+                inputs=[dataset_source, archive_input, directory_input],
                 outputs=[gallery_choice, dataset_message],
             )
             evaluate_button.click(
-                run_dataset_eval_via_backend,
-                inputs=[archive_input, gallery_choice],
+                run_dataset_eval_ui,
+                inputs=[dataset_source, archive_input, directory_input, gallery_choice],
                 outputs=[
                     summary_output,
                     confusion_output,

@@ -33,7 +33,9 @@ from .dataset_import import (
     DatasetArchiveError,
     DatasetLayoutError,
     inspect_external_dataset_archive,
+    inspect_external_dataset_directory,
     run_external_eval,
+    run_external_eval_from_directory,
 )
 from .gallery import Gallery
 from .recognizer import Recognizer
@@ -222,7 +224,22 @@ async def recognize(file: UploadFile = File(...)) -> list[RecognitionResultModel
 
 
 @app.post("/dataset-eval/inspect", responses={400: {"model": ErrorResponse}, 413: {"model": ErrorResponse}})
-async def inspect_dataset_archive(file: UploadFile = File(...)) -> dict[str, bool]:
+async def inspect_dataset_archive(
+    file: UploadFile | None = File(None),
+    dataset_dir: str | None = Form(None),
+) -> dict[str, bool]:
+    if file is not None and dataset_dir:
+        raise HTTPException(status_code=400, detail={"message": "请只提供 zip 或数据集目录中的一种"})
+    if file is None and not dataset_dir:
+        raise HTTPException(status_code=400, detail={"message": "请先上传 test.zip 或选择数据集文件夹"})
+
+    if dataset_dir:
+        try:
+            return {"has_registered": inspect_external_dataset_directory(dataset_dir)}
+        except (DatasetArchiveError, DatasetLayoutError, FileNotFoundError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail={"message": str(exc)}) from exc
+
+    assert file is not None
     content = await file.read()
     if len(content) > settings.max_upload_bytes:
         raise HTTPException(status_code=413, detail={"message": "上传压缩包过大"})
@@ -240,26 +257,47 @@ async def inspect_dataset_archive(file: UploadFile = File(...)) -> dict[str, boo
 @app.post("/dataset-eval/run", responses={400: {"model": ErrorResponse}, 413: {"model": ErrorResponse}})
 async def evaluate_dataset_archive(
     gallery_choice: str = Form("local"),
-    file: UploadFile = File(...),
+    dataset_dir: str | None = Form(None),
+    file: UploadFile | None = File(None),
 ) -> dict[str, object]:
-    content = await file.read()
-    if len(content) > settings.max_upload_bytes:
-        raise HTTPException(status_code=413, detail={"message": "上传压缩包过大"})
-
     recognizer = get_recognizer()
     if recognizer is None:
         raise HTTPException(status_code=503, detail={"message": "识别器未初始化"})
 
-    archive_path = _write_temp_upload(content, Path(file.filename or "dataset.zip").suffix or ".zip")
+    if file is not None and dataset_dir:
+        raise HTTPException(status_code=400, detail={"message": "请只提供 zip 或数据集目录中的一种"})
+    if file is None and not dataset_dir:
+        raise HTTPException(status_code=400, detail={"message": "请先上传 test.zip 或选择数据集文件夹"})
+
     try:
-        result = run_external_eval(
-            archive_path,
-            gallery_choice,
-            model=recognizer.model,
-            threshold=settings.threshold,
-            local_registered_root=settings.registered_dir,
-            local_gallery=_gallery,
-        )
+        if dataset_dir:
+            result = run_external_eval_from_directory(
+                dataset_dir,
+                gallery_choice,
+                model=recognizer.model,
+                threshold=settings.threshold,
+                local_registered_root=settings.registered_dir,
+                local_gallery=_gallery,
+            )
+        else:
+            assert file is not None
+            content = await file.read()
+            if len(content) > settings.max_upload_bytes:
+                raise HTTPException(status_code=413, detail={"message": "上传压缩包过大"})
+
+            archive_path = _write_temp_upload(content, Path(file.filename or "dataset.zip").suffix or ".zip")
+            try:
+                result = run_external_eval(
+                    archive_path,
+                    gallery_choice,
+                    model=recognizer.model,
+                    threshold=settings.threshold,
+                    local_registered_root=settings.registered_dir,
+                    local_gallery=_gallery,
+                )
+            finally:
+                archive_path.unlink(missing_ok=True)
+
         metrics = result.report.metrics
         return {
             "gallery_source": result.gallery_source,
@@ -290,5 +328,3 @@ async def evaluate_dataset_archive(
         }
     except (DatasetArchiveError, DatasetLayoutError, FileNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=400, detail={"message": str(exc)}) from exc
-    finally:
-        archive_path.unlink(missing_ok=True)

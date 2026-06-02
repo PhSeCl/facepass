@@ -227,6 +227,26 @@ def test_dataset_inspect_reports_registered_presence(monkeypatch) -> None:
     assert response.json() == {"has_registered": True}
 
 
+def test_dataset_inspect_accepts_directory_path(monkeypatch) -> None:
+    client = TestClient(app)
+    captured: dict[str, object] = {}
+
+    def fake_inspect_directory(path: str) -> bool:
+        captured["path"] = path
+        return False
+
+    monkeypatch.setattr(api, "inspect_external_dataset_directory", fake_inspect_directory)
+
+    response = client.post(
+        "/dataset-eval/inspect",
+        data={"dataset_dir": r"F:\datasets\demo"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"has_registered": False}
+    assert captured["path"] == r"F:\datasets\demo"
+
+
 def test_dataset_inspect_returns_readable_archive_error(monkeypatch) -> None:
     client = TestClient(app)
 
@@ -301,6 +321,60 @@ def test_dataset_eval_returns_structured_report(monkeypatch) -> None:
     assert payload["missed_detections"] == [{"image_name": "miss.jpg", "bbox": [1, 2, 3, 4]}]
     assert payload["false_positives"] == [{"image_name": "fp.jpg", "bbox": [5, 6, 7, 8]}]
     assert captured["kwargs"]["local_gallery"] is api._gallery
+
+
+def test_dataset_eval_accepts_directory_path(monkeypatch) -> None:
+    client = TestClient(app)
+    transparent_png = base64.b64encode(
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
+        b"\x00\x00\x00\rIDATx\x9cc`\x00\x00\x00\x02\x00\x01\xe2!\xbc3\x00\x00\x00\x00IEND\xaeB`\x82"
+    ).decode("ascii")
+    captured: dict[str, object] = {}
+
+    def fake_run_external_eval_from_directory(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return SimpleNamespace(
+            gallery_source="local",
+            report=SimpleNamespace(
+                metrics=SimpleNamespace(
+                    strict_top1_accuracy=0.5,
+                    matched_top1_accuracy=0.5,
+                    detection_recall=0.5,
+                    detection_precision=0.5,
+                    unknown_detected_accuracy=0.5,
+                    predicted_unknown_precision=0.5,
+                ),
+            ),
+            confusion_pairs=[],
+            missed_detections=[],
+            false_positives=[],
+            dataset=SimpleNamespace(),
+        )
+
+    monkeypatch.setattr(api, "run_external_eval_from_directory", fake_run_external_eval_from_directory)
+    monkeypatch.setattr(
+        api,
+        "_render_external_eval_plots",
+        lambda dataset, report: {
+            "confusion_matrix": f"data:image/png;base64,{transparent_png}",
+            "detection_metrics": f"data:image/png;base64,{transparent_png}",
+            "accuracy_metrics": f"data:image/png;base64,{transparent_png}",
+        },
+    )
+    monkeypatch.setattr(api, "get_recognizer", lambda: SimpleNamespace(model=object()))
+    monkeypatch.setattr(api, "_gallery", api.Gallery())
+
+    response = client.post(
+        "/dataset-eval/run",
+        data={"gallery_choice": "local", "dataset_dir": r"F:\datasets\demo"},
+    )
+
+    payload = response.json()
+
+    assert response.status_code == 200
+    assert payload["gallery_source"] == "local"
+    assert captured["args"][0] == r"F:\datasets\demo"
 
 
 def test_dataset_eval_returns_readable_layout_error(monkeypatch) -> None:

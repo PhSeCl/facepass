@@ -5,7 +5,9 @@ from PIL import Image
 from src.frontend.app import (
     DATASET_EVAL_TIMEOUT,
     inspect_dataset_via_backend,
+    _post_dataset_eval_directory,
     _post_dataset_eval,
+    _post_dataset_inspect_directory,
     recognize_via_backend,
     run_dataset_eval_via_backend,
 )
@@ -44,6 +46,26 @@ def test_frontend_inspects_dataset_and_shows_gallery_choice(monkeypatch, tmp_pat
 
     assert has_registered is True
     assert "registered/" in message
+
+
+def test_frontend_inspects_dataset_directory_and_shows_gallery_choice(monkeypatch, tmp_path) -> None:
+    dataset_dir = tmp_path / "dataset_dir"
+    dataset_dir.mkdir()
+
+    class FakeResponse:
+        def json(self) -> dict:
+            return {"has_registered": True}
+
+    monkeypatch.setattr("src.frontend.app._post_dataset_inspect_directory", lambda *args, **kwargs: FakeResponse())
+
+    has_registered, message = inspect_dataset_via_backend(
+        str(dataset_dir),
+        source_mode="directory",
+        backend_url="http://127.0.0.1:8000",
+    )
+
+    assert has_registered is True
+    assert "文件夹内含" in message
 
 
 def test_frontend_evaluates_dataset_and_decodes_plot_images(monkeypatch, tmp_path) -> None:
@@ -98,6 +120,57 @@ def test_frontend_evaluates_dataset_and_decodes_plot_images(monkeypatch, tmp_pat
     assert message == ""
 
 
+def test_frontend_evaluates_dataset_directory_and_decodes_plot_images(monkeypatch, tmp_path) -> None:
+    dataset_dir = tmp_path / "dataset_dir"
+    dataset_dir.mkdir()
+    data_url = (
+        "data:image/png;base64,"
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII="
+    )
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self) -> dict:
+            return {
+                "gallery_source": "local",
+                "metrics": {
+                    "strict_top1_accuracy": 1.0,
+                    "matched_top1_accuracy": 0.9,
+                    "detection_recall": 0.8,
+                    "detection_precision": 0.7,
+                    "unknown_detected_accuracy": 0.6,
+                    "predicted_unknown_precision": 0.5,
+                },
+                "plots": {
+                    "confusion_matrix": data_url,
+                    "detection_metrics": data_url,
+                    "accuracy_metrics": data_url,
+                },
+                "missed_detections": [],
+                "false_positives": [],
+            }
+
+    monkeypatch.setattr("src.frontend.app._post_dataset_eval_directory", lambda *args, **kwargs: FakeResponse())
+
+    summary, confusion_html, detection_html, accuracy_html, missed_rows, false_rows, message = (
+        run_dataset_eval_via_backend(
+            str(dataset_dir),
+            "local",
+            source_mode="directory",
+            backend_url="http://127.0.0.1:8000",
+        )
+    )
+
+    assert "strict top-1" in summary
+    assert 'src="data:image/png;base64,' in confusion_html
+    assert 'src="data:image/png;base64,' in detection_html
+    assert 'src="data:image/png;base64,' in accuracy_html
+    assert missed_rows == []
+    assert false_rows == []
+    assert message == ""
+
+
 def test_frontend_dataset_eval_uses_longer_timeout(monkeypatch, tmp_path) -> None:
     archive_path = tmp_path / "test.zip"
     archive_path.write_bytes(b"zip")
@@ -115,6 +188,48 @@ def test_frontend_dataset_eval_uses_longer_timeout(monkeypatch, tmp_path) -> Non
     _post_dataset_eval(str(archive_path), "local", backend_url="http://127.0.0.1:8000")
 
     assert observed["timeout"] == DATASET_EVAL_TIMEOUT
+
+
+def test_frontend_dataset_directory_eval_uses_longer_timeout(monkeypatch, tmp_path) -> None:
+    dataset_dir = tmp_path / "dataset_dir"
+    dataset_dir.mkdir()
+    observed: dict[str, object] = {}
+
+    class FakeResponse:
+        status_code = 200
+
+    def fake_post(*args, **kwargs):
+        observed["timeout"] = kwargs.get("timeout")
+        observed["data"] = kwargs.get("data")
+        return FakeResponse()
+
+    monkeypatch.setattr("src.frontend.app.requests.post", fake_post)
+
+    _post_dataset_eval_directory(str(dataset_dir), "local", backend_url="http://127.0.0.1:8000")
+
+    assert observed["timeout"] == DATASET_EVAL_TIMEOUT
+    assert observed["data"] == {"gallery_choice": "local", "dataset_dir": str(dataset_dir)}
+
+
+def test_frontend_dataset_directory_inspect_posts_dataset_dir(monkeypatch, tmp_path) -> None:
+    dataset_dir = tmp_path / "dataset_dir"
+    dataset_dir.mkdir()
+    observed: dict[str, object] = {}
+
+    class FakeResponse:
+        pass
+
+    def fake_post(*args, **kwargs):
+        observed["data"] = kwargs.get("data")
+        observed["timeout"] = kwargs.get("timeout")
+        return FakeResponse()
+
+    monkeypatch.setattr("src.frontend.app.requests.post", fake_post)
+
+    _post_dataset_inspect_directory(str(dataset_dir), backend_url="http://127.0.0.1:8000")
+
+    assert observed["data"] == {"dataset_dir": str(dataset_dir)}
+    assert observed["timeout"] == 5
 
 
 def test_frontend_dataset_eval_timeout_returns_friendly_message(monkeypatch, tmp_path) -> None:

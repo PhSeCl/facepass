@@ -53,6 +53,31 @@ def create_dataset_archive(
     return archive_path
 
 
+def create_dataset_directory(
+    root: Path,
+    *,
+    test_images: dict[str, tuple[int, int, int]],
+    annotations: list[dict],
+    registered_images: dict[str, tuple[int, int, int]] | None = None,
+    nested_test_dir: bool = True,
+) -> Path:
+    dataset_root = root / "test" if nested_test_dir else root
+    images_root = dataset_root / "images"
+    for image_name, color in test_images.items():
+        write_image(images_root / image_name, np.full((8, 8, 3), fill_value=color, dtype=np.uint8))
+
+    if registered_images:
+        create_registered_root(root / "registered", registered_images)
+
+    annotation_path = dataset_root / "annotations.jsonl"
+    annotation_path.parent.mkdir(parents=True, exist_ok=True)
+    annotation_path.write_text(
+        "\n".join(json.dumps(record, ensure_ascii=False) for record in annotations),
+        encoding="utf-8",
+    )
+    return root
+
+
 def test_run_external_eval_uses_local_gallery_when_archive_has_no_registered(tmp_path: Path) -> None:
     local_registered_root = create_registered_root(tmp_path / "local_registered", {"p01": (255, 0, 0)})
     archive_path = create_dataset_archive(
@@ -210,3 +235,72 @@ def test_run_external_eval_cleans_up_temporary_directory_on_failure(
 
     assert "root" in captured
     assert not captured["root"].exists()
+
+
+def test_inspect_external_dataset_directory_reports_registered_presence(tmp_path: Path) -> None:
+    dataset_dir = create_dataset_directory(
+        tmp_path / "dataset_dir",
+        test_images={"p01_t01.png": (255, 0, 0)},
+        annotations=[
+            {
+                "image": "p01_t01.png",
+                "faces": [{"bbox": [0, 0, 8, 8], "identity": "p01"}],
+            }
+        ],
+        registered_images={"p01": (255, 0, 0)},
+    )
+
+    assert dataset_import.inspect_external_dataset_directory(dataset_dir) is True
+
+
+def test_run_external_eval_from_directory_uses_directory_gallery_when_requested(tmp_path: Path) -> None:
+    local_registered_root = create_registered_root(tmp_path / "local_registered", {"p02": (0, 255, 0)})
+    dataset_dir = create_dataset_directory(
+        tmp_path / "dataset_dir",
+        test_images={"p01_t01.png": (255, 0, 0)},
+        annotations=[
+            {
+                "image": "p01_t01.png",
+                "faces": [{"bbox": [0, 0, 8, 8], "identity": "p01"}],
+            }
+        ],
+        registered_images={"p01": (255, 0, 0)},
+    )
+
+    result = dataset_import.run_external_eval_from_directory(
+        dataset_dir,
+        "archive",
+        model=FakeFaceModel(),
+        threshold=0.1,
+        local_registered_root=local_registered_root,
+    )
+
+    assert result.gallery_source == "archive"
+    assert result.report.metrics.strict_top1_accuracy == 1.0
+
+
+def test_run_external_eval_from_directory_supports_test_only_layout(tmp_path: Path) -> None:
+    local_registered_root = create_registered_root(tmp_path / "local_registered", {"p01": (255, 0, 0)})
+    dataset_dir = create_dataset_directory(
+        tmp_path / "test_only",
+        test_images={"p01_t01.png": (255, 0, 0)},
+        annotations=[
+            {
+                "image": "p01_t01.png",
+                "faces": [{"bbox": [0, 0, 8, 8], "identity": "p01"}],
+            }
+        ],
+        registered_images=None,
+        nested_test_dir=False,
+    )
+
+    result = dataset_import.run_external_eval_from_directory(
+        dataset_dir,
+        "local",
+        model=FakeFaceModel(),
+        threshold=0.1,
+        local_registered_root=local_registered_root,
+    )
+
+    assert result.gallery_source == "local"
+    assert result.report.metrics.strict_top1_accuracy == 1.0
