@@ -93,11 +93,18 @@ def generate_draft_annotations(
         raise ValueError(f"测试图片目录为空: {images_dir}")
 
     payload: dict[str, list[dict[str, object]]] = {}
+    if out_path.exists():
+        payload = json.loads(out_path.read_text(encoding="utf-8"))
+
     processed_images = 0
     total_faces = 0
     review_images = 0
 
     for image_path in image_paths:
+        if image_path.name in payload:
+            print(f"{image_path.name}: skipped=existing-annotation")
+            continue
+
         try:
             image = safe_load_image(image_path)
         except (InvalidImageError, OSError) as exc:

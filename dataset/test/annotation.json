@@ -295,7 +295,7 @@
         300,
         397
       ],
-      "identity": "p03",
+      "identity": "unknown",
       "score": 0.528664
     }
   ],
@@ -481,7 +481,7 @@
         78,
         118
       ],
-      "identity": "unknown",
+      "identity": "p20",
       "score": 0.741361
     },
     {
@@ -491,7 +491,7 @@
         81,
         119
       ],
-      "identity": "p20",
+      "identity": "unknown",
       "score": 0.493953
     }
   ],
@@ -1419,6 +1419,70 @@
       "score": 0.11841
     }
   ],
+  "group_41.jpg": [
+    {
+      "bbox": [
+        93,
+        37,
+        35,
+        46
+      ],
+      "identity": "p06",
+      "score": 0.70553
+    },
+    {
+      "bbox": [
+        173,
+        56,
+        33,
+        40
+      ],
+      "identity": "p01",
+      "score": 0.589991
+    }
+  ],
+  "group_42.jpg": [
+    {
+      "bbox": [
+        344,
+        62,
+        72,
+        97
+      ],
+      "identity": "unknown",
+      "score": 0.068661
+    },
+    {
+      "bbox": [
+        549,
+        19,
+        37,
+        42
+      ],
+      "identity": "unknown",
+      "score": 0.115273
+    },
+    {
+      "bbox": [
+        224,
+        78,
+        68,
+        101
+      ],
+      "identity": "p20",
+      "score": 0.564301
+    },
+    {
+      "bbox": [
+        54,
+        -18,
+        38,
+        46
+      ],
+      "identity": "unknown",
+      "score": 0.120339
+    }
+  ],
   "p01_t01.jpg": [
     {
       "bbox": [
@@ -1511,6 +1575,18 @@
       ],
       "identity": "p07",
       "score": 0.65089
+    }
+  ],
+  "p07_t02.jpg": [
+    {
+      "bbox": [
+        453,
+        223,
+        200,
+        240
+      ],
+      "identity": "p07",
+      "score": 0.525042
     }
   ],
   "p08_t01.jpg": [

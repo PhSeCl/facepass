@@ -248,3 +248,55 @@ def test_preannotate_main_runs_with_fake_model_and_writes_annotation(tmp_path: P
     assert payload["p02_t01.jpg"][0]["score"] == 1.0
     assert len(dataset.images) == 1
     assert dataset.images[0].image_path.name == "p02_t01.jpg"
+
+
+def test_generate_draft_annotations_preserves_existing_annotations_and_only_adds_new_images(
+    tmp_path: Path,
+) -> None:
+    test_root = tmp_path / "dataset" / "test"
+    images_dir = test_root / "images"
+    output_path = test_root / "annotation.json"
+
+    write_image(images_dir / "p01_t01.jpg", np.full((8, 8, 3), (255, 255, 0), dtype=np.uint8))
+    write_image(images_dir / "p02_t02.jpg", np.full((8, 8, 3), (0, 255, 255), dtype=np.uint8))
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        json.dumps(
+            {
+                "p01_t01.jpg": [
+                    {"bbox": [99, 98, 97, 96], "identity": "manual", "score": 0.123456}
+                ]
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    gallery = Gallery()
+    gallery.register("p01", [unit([1, 0, 0])])
+    gallery.register("p02", [unit([0, 1, 0])])
+    recognizer = Recognizer(
+        model=ScenarioModel(),
+        gallery=gallery,
+        threshold=0.8,
+        id2name={"p01": "Alice", "p02": "Bob"},
+    )
+
+    summary = generate_draft_annotations(
+        recognizer=recognizer,
+        images_dir=images_dir,
+        out_path=output_path,
+        review_threshold=0.45,
+        draft_identity_threshold=0.25,
+        overwrite=True,
+    )
+
+    payload = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert payload["p01_t01.jpg"] == [{"bbox": [99, 98, 97, 96], "identity": "manual", "score": 0.123456}]
+    assert payload["p02_t02.jpg"][0]["identity"] == "p02"
+    assert summary.processed_images == 1
+    assert summary.total_faces == 1
+    assert summary.review_images == 1
