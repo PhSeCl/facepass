@@ -1,4 +1,5 @@
 import importlib
+import os
 from pathlib import Path
 
 import cv2
@@ -13,6 +14,8 @@ from .schemas import DetectedFace
 
 
 logger = get_logger(__name__)
+_DLL_DIRECTORY_HANDLES: list[object] = []
+_REGISTERED_DLL_DIRECTORIES: set[str] = set()
 
 
 def _ensure_valid_image(image: np.ndarray) -> None:
@@ -68,6 +71,40 @@ def get_runtime_diagnostics() -> dict[str, object]:
     }
 
 
+def _register_nvidia_dll_directories(onnxruntime_module) -> None:
+    if os.name != "nt" or not hasattr(os, "add_dll_directory"):
+        return
+
+    module_file = getattr(onnxruntime_module, "__file__", None)
+    if module_file is None:
+        return
+
+    site_packages = Path(module_file).resolve().parent.parent
+    nvidia_root = site_packages / "nvidia"
+    if not nvidia_root.is_dir():
+        return
+
+    existing_path_parts = os.environ.get("PATH", "").split(os.pathsep) if os.environ.get("PATH") else []
+    for bin_dir in sorted(nvidia_root.glob("*/bin")):
+        if not bin_dir.is_dir():
+            continue
+
+        normalized = str(bin_dir)
+        if normalized not in _REGISTERED_DLL_DIRECTORIES:
+            try:
+                _DLL_DIRECTORY_HANDLES.append(os.add_dll_directory(normalized))
+                _REGISTERED_DLL_DIRECTORIES.add(normalized)
+            except OSError as exc:
+                logger.warning("注册 NVIDIA DLL 目录失败 %s: %s", normalized, exc)
+                continue
+
+        if normalized not in existing_path_parts:
+            existing_path_parts.insert(0, normalized)
+
+    if existing_path_parts:
+        os.environ["PATH"] = os.pathsep.join(existing_path_parts)
+
+
 def _maybe_preload_gpu_dlls(providers: list[str]) -> None:
     if "CUDAExecutionProvider" not in providers:
         return
@@ -84,6 +121,7 @@ def _maybe_preload_gpu_dlls(providers: list[str]) -> None:
         return
 
     try:
+        _register_nvidia_dll_directories(onnxruntime_module)
         # Empty string tells onnxruntime to search NVIDIA site-packages first,
         # then fall back to its default DLL lookup order.
         preload_dlls(directory="")

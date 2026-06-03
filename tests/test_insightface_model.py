@@ -165,6 +165,65 @@ def test_maybe_preload_gpu_dlls_skips_preload_when_cuda_provider_is_not_selected
     assert imported == []
 
 
+def test_register_nvidia_dll_directories_adds_bin_dirs_and_preserves_handles(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    site_packages = tmp_path / "site-packages"
+    onnxruntime_package = site_packages / "onnxruntime"
+    cudnn_bin = site_packages / "nvidia" / "cudnn" / "bin"
+    cublas_bin = site_packages / "nvidia" / "cublas" / "bin"
+    onnxruntime_package.mkdir(parents=True)
+    cudnn_bin.mkdir(parents=True)
+    cublas_bin.mkdir(parents=True)
+    (onnxruntime_package / "__init__.py").write_text("# test\n", encoding="utf-8")
+
+    monkeypatch.setattr(insightface_model_module.os, "name", "nt")
+    monkeypatch.setattr(insightface_model_module.os, "environ", {"PATH": r"C:\Windows"})
+    added: list[str] = []
+    monkeypatch.setattr(
+        insightface_model_module.os,
+        "add_dll_directory",
+        lambda path: added.append(path) or f"handle:{path}",
+    )
+    monkeypatch.setattr(insightface_model_module, "_DLL_DIRECTORY_HANDLES", [])
+    monkeypatch.setattr(insightface_model_module, "_REGISTERED_DLL_DIRECTORIES", set())
+
+    fake_module = type("FakeOrtModule", (), {"__file__": str(onnxruntime_package / "__init__.py")})()
+
+    insightface_model_module._register_nvidia_dll_directories(fake_module)
+
+    expected = {str(cublas_bin), str(cudnn_bin)}
+    assert set(added) == expected
+    assert set(insightface_model_module._REGISTERED_DLL_DIRECTORIES) == expected
+    assert set(insightface_model_module._DLL_DIRECTORY_HANDLES) == {f"handle:{path}" for path in expected}
+    path_parts = insightface_model_module.os.environ["PATH"].split(insightface_model_module.os.pathsep)
+    assert expected.issubset(set(path_parts))
+
+
+def test_register_nvidia_dll_directories_skips_when_nvidia_root_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    site_packages = tmp_path / "site-packages"
+    onnxruntime_package = site_packages / "onnxruntime"
+    onnxruntime_package.mkdir(parents=True)
+    (onnxruntime_package / "__init__.py").write_text("# test\n", encoding="utf-8")
+
+    monkeypatch.setattr(insightface_model_module.os, "name", "nt")
+    monkeypatch.setattr(insightface_model_module, "_DLL_DIRECTORY_HANDLES", [])
+    monkeypatch.setattr(insightface_model_module, "_REGISTERED_DLL_DIRECTORIES", set())
+    monkeypatch.setattr(
+        insightface_model_module.os,
+        "add_dll_directory",
+        lambda path: (_ for _ in ()).throw(AssertionError("should not be called")),
+    )
+
+    fake_module = type("FakeOrtModule", (), {"__file__": str(onnxruntime_package / "__init__.py")})()
+
+    insightface_model_module._register_nvidia_dll_directories(fake_module)
+
+
 def test_insightface_model_resolves_validates_and_persists_explicit_path(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
