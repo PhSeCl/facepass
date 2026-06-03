@@ -1,4 +1,7 @@
-import pickle
+import io
+import json
+import os
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -11,7 +14,7 @@ from src.face_model.base import FaceModel
 
 logger = get_logger(__name__)
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
-GALLERY_FORMAT_VERSION = 2
+GALLERY_FORMAT_VERSION = 3
 
 
 def _normalize(embedding: np.ndarray) -> np.ndarray:
@@ -38,6 +41,24 @@ class Gallery:
         self._entries: dict[str, list[np.ndarray]] = entries or {}
         self._metadata: dict[str, dict[str, int]] = metadata or {}
         self.requires_rebuild = requires_rebuild
+        self._matrix: np.ndarray | None = None
+        self._index: list[tuple[str, int]] = []
+        if self._entries:
+            self._rebuild_matrix()
+
+    def _rebuild_matrix(self) -> None:
+        rows: list[np.ndarray] = []
+        index: list[tuple[str, int]] = []
+        for identity_id, embeddings in self._entries.items():
+            for i, emb in enumerate(embeddings):
+                rows.append(emb)
+                index.append((identity_id, i))
+        if rows:
+            self._matrix = np.stack(rows, axis=0)
+            self._index = index
+        else:
+            self._matrix = None
+            self._index = []
 
     def register(
         self,
@@ -57,6 +78,7 @@ class Gallery:
         )
         stats["prototype_count"] = len(self._entries[identity_id])
         stats["valid_image_count"] += valid_image_count if valid_image_count is not None else len(normalized_embeddings)
+        self._rebuild_matrix()
 
     def build_from_dir(self, root: str, model: FaceModel) -> None:
         root_path = Path(root)
@@ -130,22 +152,19 @@ class Gallery:
             raise EmptyGalleryError("身份库为空，至少需要一张有效注册图")
 
     def match(self, embedding: np.ndarray) -> tuple[str, float] | None:
-        if not self._entries:
+        if not self._entries or self._matrix is None:
             return None
         query = _normalize(embedding)
-        best_identity: str | None = None
-        best_similarity = -1.0
-        for identity_id, embeddings in self._entries.items():
-            if not embeddings:
-                continue
-            similarities = [float(np.dot(query, candidate)) for candidate in embeddings]
-            identity_similarity = max(similarities)
-            if identity_similarity > best_similarity:
-                best_similarity = identity_similarity
-                best_identity = identity_id
-        if best_identity is None:
+        similarities = query @ self._matrix.T
+        best_per_identity: dict[str, float] = {}
+        for idx, (identity_id, _) in enumerate(self._index):
+            sim = float(similarities[idx])
+            if identity_id not in best_per_identity or sim > best_per_identity[identity_id]:
+                best_per_identity[identity_id] = sim
+        if not best_per_identity:
             return None
-        return best_identity, max(0.0, best_similarity)
+        best_identity = max(best_per_identity, key=best_per_identity.get)  # type: ignore[arg-type]
+        return best_identity, max(0.0, best_per_identity[best_identity])
 
     def identities(self) -> list[dict[str, int | str]]:
         rows: list[dict[str, int | str]] = []
@@ -165,32 +184,84 @@ class Gallery:
     def save(self, path: str | Path) -> None:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("wb") as handle:
-            pickle.dump(
-                {
-                    "version": GALLERY_FORMAT_VERSION,
-                    "entries": self._entries,
-                    "metadata": self._metadata,
-                },
-                handle,
-            )
+
+        # Flatten entries into arrays for npz serialization
+        identity_ids: list[str] = []
+        offsets: list[int] = []
+        all_embeddings: list[np.ndarray] = []
+        offset = 0
+        for identity_id in sorted(self._entries):
+            embs = self._entries[identity_id]
+            identity_ids.append(identity_id)
+            offsets.append(offset)
+            all_embeddings.extend(embs)
+            offset += len(embs)
+
+        embeddings_matrix = np.stack(all_embeddings, axis=0) if all_embeddings else np.empty((0, 0), dtype=np.float32)
+        metadata_json = json.dumps(
+            {"version": GALLERY_FORMAT_VERSION, "metadata": self._metadata},
+            ensure_ascii=False,
+        )
+
+        buf = io.BytesIO()
+        np.savez(
+            buf,
+            identity_ids=np.array(identity_ids, dtype=str),
+            embeddings=embeddings_matrix,
+            offsets=np.array(offsets, dtype=np.int64),
+            metadata_json=np.array(metadata_json),
+        )
+        npz_bytes = buf.getvalue()
+
+        tmp_fd = None
+        tmp_path = None
+        try:
+            tmp_fd, tmp_path = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
+            os.write(tmp_fd, npz_bytes)
+            os.close(tmp_fd)
+            tmp_fd = None
+            os.replace(tmp_path, str(path))
+            tmp_path = None
+        finally:
+            if tmp_fd is not None:
+                os.close(tmp_fd)
+            if tmp_path is not None:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
 
     @classmethod
     def load(cls, path: str | Path) -> "Gallery":
         path = Path(path)
-        with path.open("rb") as handle:
-            payload = pickle.load(handle)
-        if isinstance(payload, dict) and payload.get("version") == GALLERY_FORMAT_VERSION:
-            entries = payload.get("entries", {})
-            metadata = payload.get("metadata", {})
-            return cls(entries=entries, metadata=metadata)
-        if isinstance(payload, dict):
-            metadata = {
-                identity_id: {
-                    "prototype_count": len(embeddings),
-                    "valid_image_count": len(embeddings),
-                }
-                for identity_id, embeddings in payload.items()
-            }
-            return cls(entries=payload, metadata=metadata, requires_rebuild=True)
-        raise ValueError("gallery cache format is invalid")
+
+        # Read everything inside the context manager so the underlying file
+        # handle is always closed before we return. Leaving an NpzFile open
+        # would let a later atomic save (os.replace onto the same path) fail
+        # with PermissionError on Windows.
+        try:
+            with np.load(str(path), allow_pickle=False) as data:
+                identity_ids = list(data["identity_ids"])
+                embeddings = np.asarray(data["embeddings"])
+                offsets = list(data["offsets"])
+                meta_obj = json.loads(str(data["metadata_json"]))
+        except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+            # Old pickle caches, unreadable, or malformed files cannot be
+            # trusted; signal rebuild instead of unpickling arbitrary payloads.
+            logger.warning("无法加载 gallery 缓存，需要重建: %s (%s)", path, exc)
+            return cls(requires_rebuild=True)
+
+        if meta_obj.get("version") != GALLERY_FORMAT_VERSION:
+            logger.warning("Gallery 缓存版本不匹配，需要重建: %s", path)
+            return cls(requires_rebuild=True)
+
+        metadata = meta_obj.get("metadata", {})
+
+        # Reconstruct entries dict
+        entries: dict[str, list[np.ndarray]] = {}
+        for i, identity_id in enumerate(identity_ids):
+            start = offsets[i]
+            end = offsets[i + 1] if i + 1 < len(offsets) else embeddings.shape[0]
+            entries[identity_id] = [embeddings[j] for j in range(start, end)]
+
+        return cls(entries=entries, metadata=metadata)
