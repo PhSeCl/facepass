@@ -213,18 +213,19 @@ class Gallery:
         )
         npz_bytes = buf.getvalue()
 
-        tmp_fd = None
-        tmp_path = None
+        tmp_fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
+        tmp_path: str | None = tmp_name
         try:
-            tmp_fd, tmp_path = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
-            os.write(tmp_fd, npz_bytes)
-            os.close(tmp_fd)
-            tmp_fd = None
-            os.replace(tmp_path, str(path))
+            # A buffered file object's write() drains the whole buffer (looping
+            # internally), unlike a single os.write() which may write fewer
+            # bytes and leave a truncated cache behind once os.replace() runs.
+            with os.fdopen(tmp_fd, "wb") as handle:
+                handle.write(npz_bytes)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(tmp_name, str(path))
             tmp_path = None
         finally:
-            if tmp_fd is not None:
-                os.close(tmp_fd)
             if tmp_path is not None:
                 try:
                     os.unlink(tmp_path)

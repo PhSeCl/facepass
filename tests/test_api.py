@@ -333,16 +333,38 @@ def test_dataset_inspect_accepts_directory_path(monkeypatch, tmp_path) -> None:
     assert captured["path"] == str(tmp_path.resolve())
 
 
-def test_dataset_inspect_rejects_path_traversal() -> None:
+def test_dataset_inspect_rejects_nonexistent_directory() -> None:
     client = TestClient(app)
 
     response = client.post(
         "/dataset-eval/inspect",
-        data={"dataset_dir": "../../etc"},
+        data={"dataset_dir": "definitely/not/a/real/dataset-dir-xyz"},
     )
 
     assert response.status_code == 400
-    assert ".." in response.json()["message"]
+    assert "message" in response.json()
+
+
+def test_dataset_inspect_accepts_path_with_parent_segments(monkeypatch, tmp_path) -> None:
+    # A path containing ".." that normalizes to a real directory must be
+    # accepted; the validator normalizes instead of substring-blocking "..".
+    client = TestClient(app)
+    captured: dict[str, object] = {}
+    target = tmp_path / "eval"
+    target.mkdir()
+
+    def fake_inspect_directory(path: str) -> bool:
+        captured["path"] = path
+        return False
+
+    monkeypatch.setattr(api, "inspect_external_dataset_directory", fake_inspect_directory)
+
+    messy_path = str(target / ".." / "eval")
+    response = client.post("/dataset-eval/inspect", data={"dataset_dir": messy_path})
+
+    assert response.status_code == 200
+    assert response.json() == {"has_registered": False}
+    assert captured["path"] == str(target.resolve())
 
 
 def test_recognize_rejects_oversize_upload(monkeypatch) -> None:

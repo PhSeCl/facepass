@@ -47,8 +47,12 @@ MODEL_PATH_ENV_VAR = "FACEPASS_MODEL_PATH"
 
 
 def _validate_dataset_dir(dataset_dir: str) -> Path:
-    if ".." in dataset_dir:
-        raise HTTPException(status_code=400, detail={"message": "数据集路径不允许包含 .."})
+    # Normalize first so "..", relative segments, and symlinks collapse, then
+    # validate the real target. This is a local single-user tool whose UI
+    # invites pointing at any local dataset directory, so the guard is path
+    # normalization plus an existence check — not a "blocklist .." substring
+    # rule (which both false-rejects legitimate paths and fails to actually
+    # confine reads to a root).
     resolved = Path(dataset_dir).resolve()
     if not resolved.is_dir():
         raise HTTPException(status_code=400, detail={"message": f"数据集路径不存在或不是目录: {resolved}"})
