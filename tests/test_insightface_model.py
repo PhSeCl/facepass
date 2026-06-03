@@ -367,3 +367,111 @@ def test_encode_aligned_wraps_runtime_failure_as_model_load_error() -> None:
 
     with pytest.raises(ModelLoadError, match="embedding exploded"):
         model.encode_aligned(np.zeros((8, 8, 3), dtype=np.uint8))
+
+
+def test_detect_and_encode_retries_with_cpu_after_cuda_runtime_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    resolved_path = tmp_path / "resolved-buffalo-l"
+    create_calls: list[tuple[Path, str, list[str]]] = []
+
+    class GpuBrokenApp:
+        def __init__(self) -> None:
+            self.models = {"recognition": FakeRecognitionModel()}
+
+        def prepare(self, ctx_id: int, det_size: tuple[int, int]) -> None:
+            return None
+
+        def get(self, image: np.ndarray):
+            raise RuntimeError("CUDNN_BACKEND_API_FAILED")
+
+    class CpuApp:
+        def __init__(self) -> None:
+            self.models = {"recognition": FakeRecognitionModel()}
+
+        def prepare(self, ctx_id: int, det_size: tuple[int, int]) -> None:
+            return None
+
+        def get(self, image: np.ndarray):
+            face = type(
+                "Face",
+                (),
+                {
+                    "bbox": np.array([1, 2, 11, 12], dtype=np.float32),
+                    "embedding": np.array([3.0, 4.0], dtype=np.float32),
+                    "det_score": 0.9,
+                    "kps": None,
+                },
+            )()
+            return [face]
+
+    def fake_create_face_analysis_app(model_path: Path, model_name: str, providers: list[str]):
+        create_calls.append((model_path, model_name, providers))
+        if providers == ["CUDAExecutionProvider", "CPUExecutionProvider"]:
+            return GpuBrokenApp()
+        if providers == ["CPUExecutionProvider"]:
+            return CpuApp()
+        raise AssertionError(f"unexpected providers: {providers}")
+
+    monkeypatch.setattr(insightface_model_module.model_config, "resolve_model_path", lambda cli_path=None, gui_path=None: resolved_path)
+    monkeypatch.setattr(insightface_model_module.model_config, "validate_model_path", lambda path: resolved_path)
+    monkeypatch.setattr(insightface_model_module.model_config, "persist_path", lambda path: None)
+    monkeypatch.setattr(insightface_model_module, "_create_face_analysis_app", fake_create_face_analysis_app)
+
+    model = InsightFaceModel(model_path=tmp_path / "cli-model", providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
+
+    faces = model.detect_and_encode(np.zeros((8, 8, 3), dtype=np.uint8))
+
+    assert create_calls == [
+        (resolved_path, "buffalo_l", ["CUDAExecutionProvider", "CPUExecutionProvider"]),
+        (resolved_path, "buffalo_l", ["CPUExecutionProvider"]),
+    ]
+    assert len(faces) == 1
+    assert faces[0].bbox == (1, 2, 10, 10)
+
+
+def test_encode_aligned_retries_with_cpu_after_cuda_runtime_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    resolved_path = tmp_path / "resolved-buffalo-l"
+    create_calls: list[tuple[Path, str, list[str]]] = []
+
+    class BrokenRecognitionModel:
+        def get_feat(self, image: np.ndarray) -> np.ndarray:
+            raise RuntimeError("CUDNN_BACKEND_API_FAILED")
+
+    class WorkingRecognitionModel:
+        def get_feat(self, image: np.ndarray) -> np.ndarray:
+            return np.array([[3.0, 4.0]], dtype=np.float32)
+
+    class App:
+        def __init__(self, recognition_model) -> None:
+            self.models = {"recognition": recognition_model}
+
+        def prepare(self, ctx_id: int, det_size: tuple[int, int]) -> None:
+            return None
+
+    def fake_create_face_analysis_app(model_path: Path, model_name: str, providers: list[str]):
+        create_calls.append((model_path, model_name, providers))
+        if providers == ["CUDAExecutionProvider", "CPUExecutionProvider"]:
+            return App(BrokenRecognitionModel())
+        if providers == ["CPUExecutionProvider"]:
+            return App(WorkingRecognitionModel())
+        raise AssertionError(f"unexpected providers: {providers}")
+
+    monkeypatch.setattr(insightface_model_module.model_config, "resolve_model_path", lambda cli_path=None, gui_path=None: resolved_path)
+    monkeypatch.setattr(insightface_model_module.model_config, "validate_model_path", lambda path: resolved_path)
+    monkeypatch.setattr(insightface_model_module.model_config, "persist_path", lambda path: None)
+    monkeypatch.setattr(insightface_model_module, "_create_face_analysis_app", fake_create_face_analysis_app)
+
+    model = InsightFaceModel(model_path=tmp_path / "cli-model", providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
+
+    embedding = model.encode_aligned(np.zeros((8, 8, 3), dtype=np.uint8))
+
+    assert create_calls == [
+        (resolved_path, "buffalo_l", ["CUDAExecutionProvider", "CPUExecutionProvider"]),
+        (resolved_path, "buffalo_l", ["CPUExecutionProvider"]),
+    ]
+    assert np.allclose(embedding, np.array([0.6, 0.8], dtype=np.float32))

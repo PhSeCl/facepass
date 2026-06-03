@@ -161,6 +161,18 @@ def _wrap_model_runtime_error(exc: Exception, *, action: str, model_path: Path |
     return ModelLoadError(message)
 
 
+def _is_cuda_runtime_error(exc: Exception) -> bool:
+    message = str(exc).upper()
+    markers = (
+        "CUDA",
+        "CUDNN",
+        "EP_FAIL",
+        "CUDAEXECUTIONPROVIDER",
+        "TENSORRT",
+    )
+    return any(marker in message for marker in markers)
+
+
 class InsightFaceModel(FaceModel):
     def __init__(
         self,
@@ -173,22 +185,20 @@ class InsightFaceModel(FaceModel):
         explicit_model_path = model_path is not None or gui_model_path is not None
         validated_model_path: Path | None = None
         resolved_providers = providers or _default_execution_providers()
+        self.model_name = model_name
+        self.det_size = det_size
+        self.model_path: Path | None = None
+        self.providers = list(resolved_providers)
+        self._cpu_fallback_used = False
         try:
             resolved_model_path = model_config.resolve_model_path(
                 cli_path=model_path,
                 gui_path=gui_model_path,
             )
             validated_model_path = model_config.validate_model_path(resolved_model_path)
+            self.model_path = validated_model_path
 
-            self.app = _create_face_analysis_app(
-                model_path=validated_model_path,
-                model_name=model_name,
-                providers=resolved_providers,
-            )
-            self.app.prepare(ctx_id=0, det_size=det_size)
-            self.recognition_model = next(
-                model for model in self.app.models.values() if hasattr(model, "get_feat")
-            )
+            self._load_runtime(self.providers)
             if explicit_model_path:
                 model_config.persist_path(validated_model_path)
         except ModelConfigError as exc:
@@ -203,6 +213,42 @@ class InsightFaceModel(FaceModel):
             logger.error("%s", wrapped)
             raise wrapped from exc
 
+    def _load_runtime(self, providers: list[str]) -> None:
+        if self.model_path is None:
+            raise ModelLoadError("模型路径未初始化，无法装载推理运行时")
+
+        self.app = _create_face_analysis_app(
+            model_path=self.model_path,
+            model_name=self.model_name,
+            providers=providers,
+        )
+        self.app.prepare(ctx_id=0, det_size=self.det_size)
+        self.recognition_model = next(
+            model for model in self.app.models.values() if hasattr(model, "get_feat")
+        )
+        self.providers = list(providers)
+
+    def _retry_with_cpu_fallback(self, exc: Exception) -> bool:
+        if getattr(self, "_cpu_fallback_used", False):
+            return False
+        if not _is_cuda_runtime_error(exc):
+            return False
+        providers = getattr(self, "providers", None)
+        if not providers:
+            return False
+        if providers == ["CPUExecutionProvider"]:
+            return False
+        if "CPUExecutionProvider" not in providers:
+            return False
+
+        logger.warning(
+            "GPU 推理失败，尝试回退到 CPUExecutionProvider 重新加载 InsightFace runtime: %s",
+            exc,
+        )
+        self._load_runtime(["CPUExecutionProvider"])
+        self._cpu_fallback_used = True
+        return True
+
     def detect_and_encode(self, image: np.ndarray) -> list[DetectedFace]:
         _ensure_valid_image(image)
         if image.shape[2] == 4:
@@ -210,9 +256,12 @@ class InsightFaceModel(FaceModel):
         try:
             faces = self.app.get(image)
         except Exception as exc:
-            wrapped = _wrap_model_runtime_error(exc, action="推理")
-            logger.error("%s", wrapped)
-            raise wrapped from exc
+            if self._retry_with_cpu_fallback(exc):
+                faces = self.app.get(image)
+            else:
+                wrapped = _wrap_model_runtime_error(exc, action="推理")
+                logger.error("%s", wrapped)
+                raise wrapped from exc
         if not faces:
             logger.info("未检测到人脸")
             return []
@@ -237,7 +286,10 @@ class InsightFaceModel(FaceModel):
         try:
             embedding = self.recognition_model.get_feat(face_image).flatten()
         except Exception as exc:
-            wrapped = _wrap_model_runtime_error(exc, action="推理")
-            logger.error("%s", wrapped)
-            raise wrapped from exc
+            if self._retry_with_cpu_fallback(exc):
+                embedding = self.recognition_model.get_feat(face_image).flatten()
+            else:
+                wrapped = _wrap_model_runtime_error(exc, action="推理")
+                logger.error("%s", wrapped)
+                raise wrapped from exc
         return _l2_normalize(embedding)
