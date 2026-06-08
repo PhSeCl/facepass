@@ -7,7 +7,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.common.errors import (
@@ -123,6 +124,22 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="FacePass API", lifespan=lifespan)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+_FRONTEND_HTML = Path(__file__).resolve().parents[1] / "frontend" / "static" / "index.html"
+
+
+@app.get("/")
+def root():
+    if _FRONTEND_HTML.exists():
+        return HTMLResponse(content=_FRONTEND_HTML.read_text(encoding="utf-8"))
+    return HTMLResponse(content="<h2>FacePass API</h2>")
+
 
 @app.exception_handler(ModelLoadError)
 async def model_load_exception_handler(request: Request, exc: ModelLoadError) -> JSONResponse:
@@ -229,6 +246,124 @@ async def recognize(file: UploadFile = File(...)) -> list[RecognitionResultModel
         return []
     results = recognizer.recognize_image(image)
     return [RecognitionResultModel(**result.__dict__) for result in results]
+
+
+@app.post(
+    "/register",
+    responses={400: {"model": ErrorResponse}, 413: {"model": ErrorResponse}},
+)
+async def register(
+    file: UploadFile = File(...),
+    identity_id: str = Form(...),
+    name: str = Form(""),
+) -> dict:
+    content = await file.read()
+    if len(content) > settings.max_upload_bytes:
+        raise HTTPException(status_code=413, detail={"message": "上传图片过大"})
+    image = safe_load_image(content)
+
+    recognizer = get_recognizer()
+    if recognizer is None:
+        raise HTTPException(status_code=503, detail={"message": "识别器未初始化"})
+
+    faces = recognizer.model.detect_and_encode(image)
+    if not faces:
+        raise HTTPException(status_code=400, detail={"message": "未检测到人脸"})
+
+    identity_dir = settings.registered_dir / identity_id
+    identity_dir.mkdir(parents=True, exist_ok=True)
+    ext = Path(file.filename or "image.jpg").suffix.lower()
+    if ext not in {".jpg", ".jpeg", ".png", ".bmp", ".webp"}:
+        ext = ".jpg"
+    image_path = identity_dir / f"{identity_id}_r{len(list(identity_dir.glob(f'{identity_id}_r*')))+1:02d}{ext}"
+    with open(image_path, "wb") as f:
+        f.write(content)
+
+    if name:
+        _id2name[identity_id] = name
+        settings.identities_csv.parent.mkdir(parents=True, exist_ok=True)
+        with settings.identities_csv.open("w", encoding="utf-8", newline="") as fh:
+            w = csv.writer(fh)
+            w.writerow(["identity_id", "name", "domain"])
+            for iid, n in sorted(_id2name.items()):
+                w.writerow([iid, n, ""])
+
+    # rebuild gallery
+    global _gallery, _recognizer
+    model = recognizer.model
+    _gallery = Gallery()
+    _gallery.build_from_dir(str(settings.registered_dir), model)
+    _gallery.save(settings.gallery_path)
+    _recognizer = Recognizer(model, _gallery, settings.threshold, _id2name)
+    logger.info("底库已更新")
+
+    return {
+        "identity_id": identity_id,
+        "name": _id2name.get(identity_id, ""),
+    }
+
+
+@app.post(
+    "/register/batch",
+    responses={400: {"model": ErrorResponse}, 413: {"model": ErrorResponse}},
+)
+async def register_batch(
+    files: list[UploadFile] = File(...),
+    identity_id: str = Form(...),
+    name: str = Form(""),
+) -> dict:
+    recognizer = get_recognizer()
+    if recognizer is None:
+        raise HTTPException(status_code=503, detail={"message": "识别器未初始化"})
+
+    identity_dir = settings.registered_dir / identity_id
+    identity_dir.mkdir(parents=True, exist_ok=True)
+
+    saved = 0
+    for file in files:
+        content = await file.read()
+        if len(content) > settings.max_upload_bytes:
+            continue
+        try:
+            image = safe_load_image(content)
+        except InvalidImageError:
+            continue
+        faces = recognizer.model.detect_and_encode(image)
+        if not faces:
+            continue
+        ext = Path(file.filename or "image.jpg").suffix.lower()
+        if ext not in {".jpg", ".jpeg", ".png", ".bmp", ".webp"}:
+            ext = ".jpg"
+        image_path = identity_dir / f"{identity_id}_r{len(list(identity_dir.glob(f'{identity_id}_r*')))+1:02d}{ext}"
+        with open(image_path, "wb") as f:
+            f.write(content)
+        saved += 1
+
+    if saved == 0:
+        raise HTTPException(status_code=400, detail={"message": "没有成功录入任何图片"})
+
+    if name:
+        _id2name[identity_id] = name
+        settings.identities_csv.parent.mkdir(parents=True, exist_ok=True)
+        with settings.identities_csv.open("w", encoding="utf-8", newline="") as fh:
+            w = csv.writer(fh)
+            w.writerow(["identity_id", "name", "domain"])
+            for iid, n in sorted(_id2name.items()):
+                w.writerow([iid, n, ""])
+
+    global _gallery, _recognizer
+    model = recognizer.model
+    _gallery = Gallery()
+    _gallery.build_from_dir(str(settings.registered_dir), model)
+    _gallery.save(settings.gallery_path)
+    _recognizer = Recognizer(model, _gallery, settings.threshold, _id2name)
+    logger.info("底库已更新")
+
+    return {
+        "identity_id": identity_id,
+        "name": _id2name.get(identity_id, ""),
+        "saved": saved,
+    }
 
 
 @app.post("/dataset-eval/inspect", responses={400: {"model": ErrorResponse}, 413: {"model": ErrorResponse}})
