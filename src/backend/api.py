@@ -8,7 +8,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.common.errors import (
@@ -208,6 +208,18 @@ def _render_external_eval_plots(dataset, report) -> dict[str, str]:
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/identity/{identity_id}/image")
+def identity_image(identity_id: str):
+    identity_dir = settings.registered_dir / identity_id
+    if not identity_dir.exists() or not identity_dir.is_dir():
+        raise HTTPException(status_code=404, detail={"message": f"身份不存在: {identity_id}"})
+    image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+    for child in sorted(identity_dir.iterdir()):
+        if child.suffix.lower() in image_extensions:
+            return FileResponse(child, media_type=f"image/{child.suffix.lstrip('.').replace('jpg', 'jpeg')}")
+    raise HTTPException(status_code=404, detail={"message": f"身份 {identity_id} 没有注册图片"})
 
 
 @app.get("/identities", response_model=IdentitiesResponse)
