@@ -16,7 +16,10 @@
       --accent: #fafafa;
       --green: #22c55e;
       --red: #ef4444;
+<<<<<<< Updated upstream
       --amber: #f59e0b;
+=======
+>>>>>>> Stashed changes
       --radius: 12px;
       --radius-sm: 8px;
     }
@@ -39,6 +42,10 @@
       max-width: 960px;
       margin: 0 auto;
       padding: 48px 24px 80px;
+<<<<<<< Updated upstream
+=======
+      animation: fadeUp .5s ease;
+>>>>>>> Stashed changes
     }
 
     /* Header */
@@ -53,6 +60,12 @@
       font-size: 20px;
       font-weight: 600;
       letter-spacing: -0.5px;
+<<<<<<< Updated upstream
+=======
+      background: linear-gradient(135deg, #fff 0%, #888 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+>>>>>>> Stashed changes
     }
 
     .status {
@@ -68,11 +81,19 @@
       height: 7px;
       border-radius: 50%;
       background: var(--red);
+<<<<<<< Updated upstream
       transition: background .3s;
+=======
+      transition: all .4s ease;
+>>>>>>> Stashed changes
     }
 
     .status-dot.online {
       background: var(--green);
+<<<<<<< Updated upstream
+=======
+      box-shadow: 0 0 8px rgba(34, 197, 94, .5);
+>>>>>>> Stashed changes
     }
 
     /* Tabs */
@@ -83,6 +104,10 @@
       border-radius: var(--radius);
       padding: 4px;
       margin-bottom: 40px;
+<<<<<<< Updated upstream
+=======
+      animation: fadeUp .5s ease .1s both;
+>>>>>>> Stashed changes
     }
 
     .tab {
@@ -93,11 +118,24 @@
       font-weight: 500;
       text-align: center;
       cursor: pointer;
+<<<<<<< Updated upstream
       transition: all .2s;
+=======
+      transition: all .25s ease;
+>>>>>>> Stashed changes
       color: var(--text2);
       background: transparent;
       border: none;
       font-family: inherit;
+<<<<<<< Updated upstream
+=======
+      position: relative;
+      overflow: hidden;
+    }
+
+    .tab:hover {
+      color: var(--text);
+>>>>>>> Stashed changes
     }
 
     .tab.active {
@@ -105,6 +143,22 @@
       color: var(--text);
     }
 
+<<<<<<< Updated upstream
+=======
+    .tab.active::after {
+      content: '';
+      position: absolute;
+      bottom: 4px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 24px;
+      height: 2px;
+      border-radius: 1px;
+      background: var(--accent);
+      animation: tabIndicator .3s ease;
+    }
+
+>>>>>>> Stashed changes
     /* Cards */
     .card {
       background: var(--surface);
@@ -112,6 +166,15 @@
       border-radius: var(--radius);
       padding: 32px;
       margin-bottom: 24px;
+<<<<<<< Updated upstream
+=======
+      animation: fadeUp .4s ease .15s both;
+      transition: border-color .3s ease;
+    }
+
+    .card:hover {
+      border-color: #333;
+>>>>>>> Stashed changes
     }
 
     .card-title {
@@ -128,7 +191,11 @@
       padding: 48px 24px;
       text-align: center;
       cursor: pointer;
+<<<<<<< Updated upstream
       transition: all .25s;
+=======
+      transition: all .3s ease;
+>>>>>>> Stashed changes
       position: relative;
       overflow: hidden;
     }
@@ -159,6 +226,14 @@
       margin: 0 auto 16px;
       color: var(--text2);
       opacity: .6;
+<<<<<<< Updated upstream
+=======
+      transition: transform .3s ease;
+    }
+
+    .upload-zone:hover .upload-icon {
+      transform: translateY(-4px);
+>>>>>>> Stashed changes
     }
 
     .upload-text {
@@ -179,6 +254,10 @@
       object-fit: contain;
       border-radius: var(--radius);
       display: block;
+<<<<<<< Updated upstream
+=======
+      animation: fadeIn .4s ease;
+>>>>>>> Stashed changes
     }
 
     .preview-actions {
@@ -201,11 +280,19 @@
       align-items: center;
       justify-content: center;
       backdrop-filter: blur(8px);
+<<<<<<< Updated upstream
       transition: background .2s;
+=======
+      transition: all .2s ease;
+>>>>>>> Stashed changes
     }
 
     .preview-btn:hover {
       background: rgba(0, 0, 0, .8);
+<<<<<<< Updated upstream
+=======
+      transform: scale(1.1);
+>>>>>>> Stashed changes
     }
 
     /* Form */
@@ -231,11 +318,19 @@
       font-size: 15px;
       font-family: inherit;
       outline: none;
+<<<<<<< Updated upstream
       transition: border-color .2s;
+=======
+      transition: all .25s ease;
+>>>>>>> Stashed changes
     }
 
     .form-input:focus {
       border-color: #555;
+<<<<<<< Updated upstream
+=======
+      box-shadow: 0 0 0 3px rgba(255, 255, 255, .04);
+>>>>>>> Stashed changes
     }
 
     .form-input::placeholder {
@@ -253,10 +348,31 @@
       font-size: 14px;
       font-weight: 500;
       cursor: pointer;
+<<<<<<< Updated upstream
       transition: all .2s;
       font-family: inherit;
       border: none;
       outline: none;
+=======
+      transition: all .25s ease;
+      font-family: inherit;
+      border: none;
+      outline: none;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(255, 255, 255, 0);
+      transition: background .3s ease;
+    }
+
+    .btn:active::after {
+      background: rgba(255, 255, 255, .1);
+>>>>>>> Stashed changes
     }
 
     .btn-primary {
@@ -266,11 +382,21 @@
 
     .btn-primary:hover {
       opacity: .85;
+<<<<<<< Updated upstream
     }
 
     .btn-primary:disabled {
       opacity: .4;
       cursor: not-allowed;
+=======
+      transform: translateY(-1px);
+    }
+
+    .btn-primary:disabled {
+      opacity: .35;
+      cursor: not-allowed;
+      transform: none;
+>>>>>>> Stashed changes
     }
 
     .btn-secondary {
@@ -281,6 +407,10 @@
 
     .btn-secondary:hover {
       background: #252525;
+<<<<<<< Updated upstream
+=======
+      transform: translateY(-1px);
+>>>>>>> Stashed changes
     }
 
     /* Spinner */
@@ -293,12 +423,15 @@
       animation: spin .6s linear infinite;
     }
 
+<<<<<<< Updated upstream
     @keyframes spin {
       to {
         transform: rotate(360deg);
       }
     }
 
+=======
+>>>>>>> Stashed changes
     /* Results */
     .result-card {
       background: var(--surface2);
@@ -309,6 +442,36 @@
       display: flex;
       gap: 16px;
       align-items: flex-start;
+<<<<<<< Updated upstream
+=======
+      animation: fadeUp .35s ease both;
+      transition: all .25s ease;
+    }
+
+    .result-card:hover {
+      border-color: #333;
+      transform: translateX(4px);
+    }
+
+    .result-card:nth-child(1) {
+      animation-delay: .05s;
+    }
+
+    .result-card:nth-child(2) {
+      animation-delay: .1s;
+    }
+
+    .result-card:nth-child(3) {
+      animation-delay: .15s;
+    }
+
+    .result-card:nth-child(4) {
+      animation-delay: .2s;
+    }
+
+    .result-card:nth-child(5) {
+      animation-delay: .25s;
+>>>>>>> Stashed changes
     }
 
     .result-avatar {
@@ -382,8 +545,13 @@
       font-size: 14px;
       font-weight: 500;
       z-index: 1000;
+<<<<<<< Updated upstream
       animation: toastIn .3s ease;
       backdrop-filter: blur(12px);
+=======
+      backdrop-filter: blur(12px);
+      animation: toastIn .35s ease, toastOut .3s ease 2.7s forwards;
+>>>>>>> Stashed changes
     }
 
     .toast.success {
@@ -398,6 +566,7 @@
       border: 1px solid rgba(239, 68, 68, .3);
     }
 
+<<<<<<< Updated upstream
     @keyframes toastIn {
       from {
         opacity: 0;
@@ -424,6 +593,25 @@
       max-width: 100%;
       max-height: 480px;
       display: block;
+=======
+    /* Image w/ boxes - use percentage positioning so boxes stay accurate at any size */
+    .result-image-wrap {
+      position: relative;
+      display: block;
+      width: 100%;
+      max-width: 640px;
+      margin: 0 auto 24px;
+      border-radius: var(--radius);
+      overflow: hidden;
+      line-height: 0;
+      animation: fadeIn .5s ease;
+    }
+
+    .result-image-wrap img {
+      width: 100%;
+      display: block;
+      border-radius: var(--radius);
+>>>>>>> Stashed changes
     }
 
     .face-box {
@@ -431,6 +619,10 @@
       border: 2px solid;
       border-radius: 4px;
       pointer-events: none;
+<<<<<<< Updated upstream
+=======
+      animation: boxPulse 2s ease-in-out infinite;
+>>>>>>> Stashed changes
     }
 
     .face-label {
@@ -441,6 +633,11 @@
       border-radius: 4px;
       white-space: nowrap;
       color: #fff;
+<<<<<<< Updated upstream
+=======
+      transform: translateY(-100%);
+      animation: labelFade .4s ease both;
+>>>>>>> Stashed changes
     }
 
     /* Identity List */
@@ -457,11 +654,20 @@
       padding: 14px 20px;
       background: var(--surface2);
       border-radius: var(--radius-sm);
+<<<<<<< Updated upstream
       transition: background .2s;
+=======
+      transition: all .25s ease;
+      animation: fadeUp .3s ease both;
+>>>>>>> Stashed changes
     }
 
     .identity-row:hover {
       background: #222;
+<<<<<<< Updated upstream
+=======
+      transform: translateX(4px);
+>>>>>>> Stashed changes
     }
 
     .identity-row-left {
@@ -497,6 +703,10 @@
       text-align: center;
       padding: 48px 24px;
       color: var(--text2);
+<<<<<<< Updated upstream
+=======
+      animation: fadeIn .5s ease;
+>>>>>>> Stashed changes
     }
 
     .empty-icon {
@@ -505,6 +715,115 @@
       opacity: .4;
     }
 
+<<<<<<< Updated upstream
+=======
+    /* Loading skeleton */
+    .skeleton {
+      background: linear-gradient(90deg, var(--surface2) 25%, #252525 50%, var(--surface2) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s ease-in-out infinite;
+      border-radius: var(--radius-sm);
+      height: 60px;
+      margin-bottom: 12px;
+    }
+
+    /* Keyframes */
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+      }
+
+      to {
+        opacity: 1;
+      }
+    }
+
+    @keyframes toastIn {
+      from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-12px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+    }
+
+    @keyframes toastOut {
+      from {
+        opacity: 1;
+      }
+
+      to {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-8px);
+      }
+    }
+
+    @keyframes tabIndicator {
+      from {
+        width: 0;
+      }
+
+      to {
+        width: 24px;
+      }
+    }
+
+    @keyframes boxPulse {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: .7;
+      }
+    }
+
+    @keyframes labelFade {
+      from {
+        opacity: 0;
+        transform: translateY(-80%);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(-100%);
+      }
+    }
+
+    @keyframes shimmer {
+      from {
+        background-position: -200% 0;
+      }
+
+      to {
+        background-position: 200% 0;
+      }
+    }
+
+>>>>>>> Stashed changes
     /* Responsive */
     @media (max-width: 640px) {
       .app {
@@ -518,6 +837,14 @@
       .header {
         margin-bottom: 32px;
       }
+<<<<<<< Updated upstream
+=======
+
+      .face-label {
+        font-size: 10px;
+        padding: 1px 6px;
+      }
+>>>>>>> Stashed changes
     }
   </style>
 </head>
@@ -590,9 +917,13 @@
           <label class="form-label">姓名</label>
           <input class="form-input" id="regName" placeholder="例如：张三">
         </div>
+<<<<<<< Updated upstream
         <button class="btn btn-primary" id="regSubmitBtn" onclick="submitRegister()">
           录入底库
         </button>
+=======
+        <button class="btn btn-primary" id="regSubmitBtn" onclick="submitRegister()">录入底库</button>
+>>>>>>> Stashed changes
       </div>
       <div id="registerResult" style="display:none"></div>
     </div>
@@ -617,11 +948,17 @@
 
   <script>
     const API = 'http://127.0.0.1:8000';
+<<<<<<< Updated upstream
     let currentTab = 'recognize';
     let recognizeFile = null;
     let registerFiles = [];
 
     // --- Init ---
+=======
+    let recognizeFile = null;
+    let registerFiles = [];
+
+>>>>>>> Stashed changes
     document.addEventListener('DOMContentLoaded', () => {
       checkHealth();
       setupDragDrop('recognizeDropZone', 'recognizeInput', (files) => handleRecognizeFile(files[0]));
@@ -640,12 +977,19 @@
       });
     }
 
+<<<<<<< Updated upstream
     // --- Health Check ---
     async function checkHealth() {
       try {
         const r = await fetch(API + '/health');
         if (r.ok) setStatus(true);
         else setStatus(false);
+=======
+    async function checkHealth() {
+      try {
+        const r = await fetch(API + '/health');
+        setStatus(r.ok);
+>>>>>>> Stashed changes
       } catch { setStatus(false); }
     }
 
@@ -656,6 +1000,7 @@
       else { dot.classList.remove('online'); text.textContent = '未连接'; }
     }
 
+<<<<<<< Updated upstream
     // --- Tabs ---
     function switchTab(tab) {
       currentTab = tab;
@@ -669,12 +1014,33 @@
     }
 
     // --- Toast ---
+=======
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach((t, i) => {
+        t.classList.toggle('active', ['recognize', 'register', 'gallery'][i] === tab);
+      });
+      const panels = {
+        recognize: document.getElementById('tab-recognize'),
+        register: document.getElementById('tab-register'),
+        gallery: document.getElementById('tab-gallery')
+      };
+      Object.entries(panels).forEach(([key, el]) => {
+        el.style.display = key === tab ? '' : 'none';
+      });
+      if (tab === 'gallery') loadIdentities();
+    }
+
+>>>>>>> Stashed changes
     function toast(msg, type) {
       const el = document.createElement('div');
       el.className = 'toast ' + type;
       el.textContent = msg;
       document.body.appendChild(el);
+<<<<<<< Updated upstream
       setTimeout(() => el.remove(), 3000);
+=======
+      setTimeout(() => el.remove(), 3200);
+>>>>>>> Stashed changes
     }
 
     // --- Recognize ---
@@ -683,6 +1049,7 @@
       recognizeFile = file;
       const zone = document.getElementById('recognizeDropZone');
       zone.classList.add('has-image');
+<<<<<<< Updated upstream
       zone.innerHTML = `
     <img class="preview-img" src="${URL.createObjectURL(file)}" alt="preview">
     <div class="preview-actions">
@@ -690,6 +1057,9 @@
         <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
       </button>
     </div>`;
+=======
+      zone.innerHTML = `<img class="preview-img" src="${URL.createObjectURL(file)}" alt="preview"><div class="preview-actions"><button class="preview-btn" onclick="event.stopPropagation();clearRecognize()"><svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button></div>`;
+>>>>>>> Stashed changes
       zone.onclick = null;
       runRecognize();
     }
@@ -698,12 +1068,16 @@
       recognizeFile = null;
       const zone = document.getElementById('recognizeDropZone');
       zone.classList.remove('has-image');
+<<<<<<< Updated upstream
       zone.innerHTML = `
     <svg class="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
     </svg>
     <div class="upload-text">点击或拖拽上传图片</div>
     <div class="upload-hint">JPG / PNG / WEBP</div>`;
+=======
+      zone.innerHTML = `<svg class="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg><div class="upload-text">点击或拖拽上传图片</div><div class="upload-hint">JPG / PNG / WEBP</div>`;
+>>>>>>> Stashed changes
       zone.onclick = () => document.getElementById('recognizeInput').click();
       document.getElementById('recognizeResult').style.display = 'none';
     }
@@ -719,11 +1093,23 @@
       const list = document.getElementById('recognizeList');
       resultDiv.style.display = '';
 
+<<<<<<< Updated upstream
+=======
+      // Loading state
+      wrap.innerHTML = '<div style="text-align:center;padding:24px"><span class="spinner" style="width:28px;height:28px;border-width:3px;display:inline-block;color:var(--text2)"></span></div>';
+      list.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
+
+>>>>>>> Stashed changes
       try {
         const r = await fetch(API + '/recognize', { method: 'POST', body: form });
         if (!r.ok) {
           const err = await r.json().catch(() => ({ message: '请求失败' }));
           toast(err.message || '识别失败', 'error');
+<<<<<<< Updated upstream
+=======
+          wrap.innerHTML = '';
+          list.innerHTML = '';
+>>>>>>> Stashed changes
           return;
         }
         const results = await r.json();
@@ -734,6 +1120,7 @@
           return;
         }
 
+<<<<<<< Updated upstream
         // Draw image with boxes
         const imgUrl = URL.createObjectURL(recognizeFile);
         const img = new Image();
@@ -747,11 +1134,23 @@
 
           let html = `<div class="result-image-wrap" style="width:${w}px;height:${h}px">`;
           html += `<img src="${imgUrl}" style="width:${w}px;height:${h}px">`;
+=======
+        // Draw image with percentage-based boxes — always accurate regardless of display size
+        const imgUrl = URL.createObjectURL(recognizeFile);
+        const img = new Image();
+        img.onload = () => {
+          const nW = img.naturalWidth;
+          const nH = img.naturalHeight;
+
+          let html = `<div class="result-image-wrap">`;
+          html += `<img src="${imgUrl}" alt="result">`;
+>>>>>>> Stashed changes
 
           results.forEach((res, i) => {
             const [bx, by, bw, bh] = res.bbox;
             const color = res.is_unknown ? 'var(--red)' : 'var(--green)';
             const label = res.is_unknown ? '未知' : (res.name || res.identity_id);
+<<<<<<< Updated upstream
             const left = bx * scale;
             const top = by * scale;
             const width = bw * scale;
@@ -759,6 +1158,15 @@
 
             html += `<div class="face-box" style="left:${left}px;top:${top}px;width:${width}px;height:${height}px;border-color:${color}"></div>`;
             html += `<div class="face-label" style="left:${left}px;top:${Math.max(0, top - 24)}px;background:${color}">${label} ${res.similarity.toFixed(2)}</div>`;
+=======
+            const left = (bx / nW * 100);
+            const top = (by / nH * 100);
+            const width = (bw / nW * 100);
+            const height = (bh / nH * 100);
+
+            html += `<div class="face-box" style="left:${left}%;top:${top}%;width:${width}%;height:${height}%;border-color:${color};animation-delay:${i * 0.3}s"></div>`;
+            html += `<div class="face-label" style="left:${left}%;top:${top}%;background:${color};animation-delay:${i * 0.3}s">${label} ${res.similarity.toFixed(2)}</div>`;
+>>>>>>> Stashed changes
           });
 
           html += '</div>';
@@ -767,9 +1175,15 @@
         img.src = imgUrl;
 
         // Results list
+<<<<<<< Updated upstream
         list.innerHTML = results.map((res) => `
       <div class="result-card">
         <div class="result-avatar">${res.is_unknown ? '?' : (res.name || res.identity_id).charAt(0)}</div>
+=======
+        list.innerHTML = results.map((res, i) => `
+      <div class="result-card" style="animation-delay:${i * 0.08}s">
+        <div class="result-avatar" style="background:${res.is_unknown ? 'rgba(239,68,68,.1)' : 'rgba(34,197,94,.1)'};color:${res.is_unknown ? 'var(--red)' : 'var(--green)'}">${res.is_unknown ? '?' : (res.name || res.identity_id).charAt(0)}</div>
+>>>>>>> Stashed changes
         <div class="result-info">
           <div class="result-name">
             ${res.is_unknown ? '未知身份' : (res.name || res.identity_id)}
@@ -777,8 +1191,13 @@
           </div>
           <div class="result-id">ID: ${res.identity_id}</div>
           <div class="result-meta">
+<<<<<<< Updated upstream
             <span>相似度: ${(res.similarity * 100).toFixed(1)}%</span>
             <span>位置: [${res.bbox[0]}, ${res.bbox[1]}, ${res.bbox[2]}x${res.bbox[3]}]</span>
+=======
+            <span>${(res.similarity * 100).toFixed(1)}%</span>
+            <span>[${res.bbox[0]}, ${res.bbox[1]}, ${res.bbox[2]}x${res.bbox[3]}]</span>
+>>>>>>> Stashed changes
           </div>
         </div>
       </div>
@@ -787,6 +1206,11 @@
       } catch (e) {
         toast('网络错误，请检查服务是否运行', 'error');
         setStatus(false);
+<<<<<<< Updated upstream
+=======
+        wrap.innerHTML = '';
+        list.innerHTML = '';
+>>>>>>> Stashed changes
       }
     }
 
@@ -848,7 +1272,11 @@
 
         const resultDiv = document.getElementById('registerResult');
         resultDiv.style.display = '';
+<<<<<<< Updated upstream
         resultDiv.innerHTML = `<div class="card"><div class="card-title">录入完成</div><div class="result-card"><div class="result-avatar">${(data.name || data.identity_id).charAt(0)}</div><div class="result-info"><div class="result-name">${data.name || data.identity_id}</div><div class="result-id">成功: ${data.saved || 1} 张 · ID: ${data.identity_id}</div></div></div><button class="btn btn-secondary" style="margin-top:12px" onclick="clearRegister()">继续录入</button></div>`;
+=======
+        resultDiv.innerHTML = `<div class="card"><div class="card-title">录入完成</div><div class="result-card"><div class="result-avatar" style="background:rgba(34,197,94,.1);color:var(--green)">${(data.name || data.identity_id).charAt(0)}</div><div class="result-info"><div class="result-name">${data.name || data.identity_id}</div><div class="result-id">成功: ${data.saved || 1} 张 · ID: ${data.identity_id}</div></div></div><button class="btn btn-secondary" style="margin-top:12px" onclick="clearRegister()">继续录入</button></div>`;
+>>>>>>> Stashed changes
 
         clearRegister();
       } catch (e) {
@@ -873,8 +1301,13 @@
           return;
         }
 
+<<<<<<< Updated upstream
         list.innerHTML = data.identities.map((item) => `
       <div class="identity-row">
+=======
+        list.innerHTML = data.identities.map((item, i) => `
+      <div class="identity-row" style="animation-delay:${i * 0.04}s">
+>>>>>>> Stashed changes
         <div class="identity-row-left">
           <div class="identity-avatar">${(item.name || item.identity_id).charAt(0)}</div>
           <div>
