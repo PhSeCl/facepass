@@ -60,6 +60,35 @@ from .schemas import (
 
 logger = get_logger(__name__)
 MODEL_PATH_ENV_VAR = "FACEPASS_MODEL_PATH"
+
+
+def _validate_dataset_dir(dataset_dir: str) -> Path:
+    # Normalize first so "..", relative segments, and symlinks collapse, then
+    # validate the real target. This is a local single-user tool whose UI
+    # invites pointing at any local dataset directory, so the guard is path
+    # normalization plus an existence check — not a "blocklist .." substring
+    # rule (which both false-rejects legitimate paths and fails to actually
+    # confine reads to a root).
+    resolved = Path(dataset_dir).resolve()
+    if not resolved.is_dir():
+        raise HTTPException(status_code=400, detail={"message": f"数据集路径不存在或不是目录: {resolved}"})
+    return resolved
+
+
+async def _read_upload_limited(file: UploadFile, max_bytes: int) -> bytes:
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(8192)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(status_code=413, detail={"message": "上传文件过大"})
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 _recognizer: Recognizer | None = None
 _gallery: Gallery = Gallery()
 _id2name: dict[str, str] = {}
@@ -353,9 +382,7 @@ def identities() -> IdentitiesResponse:
     responses={400: {"model": ErrorResponse}, 413: {"model": ErrorResponse}},
 )
 async def recognize(file: UploadFile = File(...)) -> list[RecognitionResultModel]:
-    content = await file.read()
-    if len(content) > settings.max_upload_bytes:
-        raise HTTPException(status_code=413, detail={"message": "上传图片过大"})
+    content = await _read_upload_limited(file, settings.max_upload_bytes)
     try:
         image = safe_load_image(content)
     except InvalidImageError as exc:
@@ -477,16 +504,15 @@ async def inspect_dataset_archive(
         raise HTTPException(status_code=400, detail={"message": "请先上传 test.zip 或选择数据集文件夹"})
 
     if dataset_dir:
+        validated_dir = _validate_dataset_dir(dataset_dir)
         try:
-            has_registered = inspect_external_dataset_directory(dataset_dir)
+            has_registered = inspect_external_dataset_directory(str(validated_dir))
         except (DatasetArchiveError, DatasetLayoutError, FileNotFoundError, ValueError) as exc:
             raise HTTPException(status_code=400, detail={"message": str(exc)}) from exc
         return DatasetInspectResponse(has_registered=has_registered)
 
     assert file is not None
-    content = await file.read()
-    if len(content) > settings.max_upload_bytes:
-        raise HTTPException(status_code=413, detail={"message": "上传压缩包过大"})
+    content = await _read_upload_limited(file, settings.max_upload_bytes)
 
     archive_path = _write_temp_upload(content, Path(file.filename or "dataset.zip").suffix or ".zip")
     try:
@@ -519,9 +545,10 @@ async def evaluate_dataset_archive(
 
     try:
         if dataset_dir:
+            validated_dir = _validate_dataset_dir(dataset_dir)
             result = await run_in_threadpool(
                 run_external_eval_from_directory,
-                dataset_dir,
+                str(validated_dir),
                 gallery_choice,
                 model=recognizer.model,
                 threshold=settings.threshold,
@@ -530,9 +557,7 @@ async def evaluate_dataset_archive(
             )
         else:
             assert file is not None
-            content = await file.read()
-            if len(content) > settings.max_upload_bytes:
-                raise HTTPException(status_code=413, detail={"message": "上传压缩包过大"})
+            content = await _read_upload_limited(file, settings.max_upload_bytes)
 
             archive_path = _write_temp_upload(content, Path(file.filename or "dataset.zip").suffix or ".zip")
             try:
