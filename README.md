@@ -14,9 +14,12 @@ src/
 |-- common/              # 日志、重试、安全图片解码、通用异常
 |-- face_model/          # 模型端：FaceModel 抽象、DetectedFace、InsightFace 实现
 |-- backend/             # 后端：Gallery、Recognizer、FastAPI API、配置
-`-- frontend/            # 前端：Gradio 界面，仅通过 HTTP 调后端
+`-- frontend/
+    |-- app.py           # 旧 Gradio 界面（已弃用，当前不启动）
+    `-- static/
+        `-- index.html   # 新 Web 前端，由后端 GET / 直接返回
 scripts/
-|-- run_dev.py           # 可选的一键开发启动脚本
+|-- run_dev.py           # 一键启动脚本（只启后端 + 内置前端）
 |-- preannotate_test.py  # 为 dataset/test/images 生成预标注草稿
 |-- summarize_test_annotations.py # 统计 test 标注人数并检查漏标/多余标注
 |-- eval_self.py         # 单脸裁剪口径评测脚本
@@ -24,15 +27,12 @@ scripts/
 `-- eval_end2end.py      # 多脸端到端评测与出图
 dataset/
 |-- identities.csv       # 身份 ID 到显示名映射，已纳入版本控制
-|-- registered/          # 真实注册集：p01..p20 注册照目录，已纳入版本控制
-`-- test/                # 自采测试图与标注目录，测试图已纳入版本控制
-data/
-|-- registered/          # 测试 / 脚本 fixture
-|-- test/                # 测试 / 脚本 fixture
-`-- tmp_*                # 临时样本，不是正式数据集根目录
+|-- registered/          # 注册集：每个身份一个文件夹，内含注册照
+`-- test/                # 自采测试图与标注目录
 models/                  # gallery.pkl 等本地产物，不进 git
 reports/                 # 评测 JSON / PNG 输出，本地产物，不进 git
-tests/                  # 接口、边界和错误路径测试
+tests/                   # 接口、边界和错误路径测试
+requirements.txt         # pip 依赖列表
 ```
 
 ## 依赖
@@ -56,31 +56,24 @@ uv pip install "onnxruntime-gpu[cuda,cudnn]"
 
 ## 运行
 
-运行 `insightface` 模型前，需要你自己准备本地 `buffalo_l` 目录。项目不会再自动下载或托管模型文件。当前适配器按“`buffalo_l` 模型目录本身”加载，不是传 `models_cache` 根目录。
+运行 `insightface` 模型前，需要你自己准备本地 `buffalo_l` 目录。项目不会再自动下载或托管模型文件。当前适配器按"`buffalo_l` 模型目录本身"加载，不是传 `models_cache` 根目录。
 
 ```powershell
-# 1. 准备本地 buffalo_l 模型目录，例如：
-#    F:\InsightFace\models_cache\models\buffalo_l
-#
-# 2. 准备注册集：将 p01..p20 的注册照放到 dataset/registered/p01/ 等目录。
+# 安装依赖
+pip install -r requirements.txt
 
-# 3. 启动后端和前端
-uv run python scripts/run_dev.py --model-path F:\InsightFace\models_cache\models\buffalo_l
-
-# 或者只启动后端
-$env:FACEPASS_MODEL_PATH = "F:\InsightFace\models_cache\models\buffalo_l"
-uv run uvicorn src.backend.api:app --port 8000
-
-# 另开终端启动前端
-uv run python src/frontend/app.py
+# 一键启动（后端 + Web 前端）
+python scripts/run_dev.py --model-path F:\InsightFace\models_cache\models\buffalo_l
 ```
 
-`run_dev.py` 会同时启动：
+`run_dev.py` 只启动 FastAPI 后端，Web 前端由 `GET http://127.0.0.1:8000/` 直接返回。无需再单独启动 Gradio。
 
-- FastAPI 后端：`http://127.0.0.1:8000`
-- Gradio 前端：`http://127.0.0.1:7860`
+也可以手动启动后端：
 
-浏览器应打开 `7860`。`8000` 只提供 API，所以直接访问 `GET /` 或请求 `/favicon.ico` 返回 `404` 是预期行为，不代表后端启动失败。
+```powershell
+$env:FACEPASS_MODEL_PATH = "F:\InsightFace\models_cache\models\buffalo_l"
+uv run uvicorn src.backend.api:app --port 8000
+```
 
 如果路径校验通过，显式传入的模型目录会被写入项目根的 `config.toml`。TOML 里建议使用正斜杠：
 
@@ -134,25 +127,263 @@ curl http://127.0.0.1:8000/health
 
 ## API
 
-- `GET /health`：返回服务状态。
-- `GET /identities`：返回身份库中每个身份的原型向量数量与有效注册图数量。
-- `POST /recognize`：multipart 上传图片，返回 `RecognitionResult` 列表。
+所有接口返回 JSON，错误时格式为 `{"message": "..."}` 。
 
-`GET /identities` 当前字段：
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/health` | 服务存活检查，返回 `{"status":"ok"}` |
+| `GET` | `/identities` | 列出底库中所有已注册身份 |
+| `POST` | `/recognize` | 上传图片，检测人脸并返回识别结果 |
+| `POST` | `/register` | 上传单张图片，注册人脸到指定身份 |
+| `POST` | `/register/batch` | 批量上传图片，注册到同一身份 |
 
-- `identity_id`
-- `name`
-- `count`：兼容字段，等于 `prototype_count`
-- `prototype_count`：当前身份实际参与检索的原型向量数
-- `valid_image_count`：通过校验并参与建库的注册图数量
+（历史接口 `POST /dataset-eval/inspect`、`POST /dataset-eval/run` 保留不变，此处不展开。）
 
-`RecognitionResult` 字段保持为：
+---
 
-- `bbox`: `(x, y, w, h)`
-- `identity_id`: 命中身份或 `unknown`
-- `name`: 显示名，unknown 时为 `null`
-- `similarity`: 相似度
-- `is_unknown`: 是否为 unknown
+### `GET /health`
+
+```
+GET http://127.0.0.1:8000/health
+→ {"status": "ok"}
+```
+
+---
+
+### `GET /identities`
+
+返回底库中全部身份信息：
+
+```json
+{
+  "identities": [
+    {
+      "identity_id": "p01",
+      "name": "成龙",
+      "count": 1,
+      "prototype_count": 1,
+      "valid_image_count": 3
+    }
+  ]
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `identity_id` | `string` | 身份 ID |
+| `name` | `string \| null` | 显示名（来自 `identities.csv`） |
+| `count` | `int` | 兼容字段，等于 `prototype_count` |
+| `prototype_count` | `int` | 原型向量数 |
+| `valid_image_count` | `int` | 该身份的有效注册图数量 |
+
+---
+
+### `POST /recognize`
+
+上传一张图片，检测其中所有人脸并返回识别结果。
+
+**请求**：`multipart/form-data`
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `file` | `file` | 是 | 图片文件（JPG/PNG/WEBP，≤10MB） |
+
+**成功响应 (200)**：
+
+```json
+[
+  {
+    "bbox": [120, 80, 200, 240],
+    "identity_id": "p01",
+    "name": "成龙",
+    "similarity": 0.873,
+    "is_unknown": false
+  },
+  {
+    "bbox": [400, 60, 180, 220],
+    "identity_id": "unknown",
+    "name": null,
+    "similarity": 0.215,
+    "is_unknown": true
+  }
+]
+```
+
+字段说明：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `bbox` | `[int,int,int,int]` | 人脸框 `[x, y, width, height]` |
+| `identity_id` | `string` | 匹配到的身份 ID，未匹配时为 `"unknown"` |
+| `name` | `string \| null` | 匹配身份的显示名，unknown 时为 `null` |
+| `similarity` | `float` | 与底库最佳匹配的余弦相似度 |
+| `is_unknown` | `bool` | 是否低于阈值被判定为 unknown |
+
+**错误**：
+- `400` — 图片格式无效或未检测到人脸
+- `413` — 图片超过 10MB
+
+---
+
+### `POST /register`
+
+上传单张图片，注册到指定身份。注册成功后自动重建底库，无需重启。
+
+**请求**：`multipart/form-data`
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `file` | `file` | 是 | 人脸照片 |
+| `identity_id` | `string` | 是 | 身份 ID，例如 `p21` |
+| `name` | `string` | 否 | 显示名，会写入 `identities.csv` |
+
+**成功响应 (200)**：
+
+```json
+{
+  "identity_id": "p21",
+  "name": "张三"
+}
+```
+
+**错误**：
+- `400` — 未检测到人脸
+- `413` — 图片过大
+- `503` — 识别器未初始化
+
+---
+
+### `POST /register/batch`
+
+批量上传多张图片，全部注册到同一个身份。适合注册集整理时批量导入。
+
+**请求**：`multipart/form-data`
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `files` | `file[]` | 是 | 多张人脸照片 |
+| `identity_id` | `string` | 是 | 目标身份 ID |
+| `name` | `string` | 否 | 显示名 |
+
+**成功响应 (200)**：
+
+```json
+{
+  "identity_id": "p21",
+  "name": "张三",
+  "saved": 3
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `identity_id` | `string` | 身份 ID |
+| `name` | `string` | 显示名 |
+| `saved` | `int` | 成功录入的图片数量 |
+
+**错误**：
+- `400` — 没有一张图片成功录入（全部没人脸或格式错误）
+- `413` — 有图片超过 10MB
+- `503` — 识别器未初始化
+
+---
+
+## 注册新身份（给负责增加数据的同学）
+
+### 方式一：Web 界面（推荐）
+
+启动服务后打开 `http://127.0.0.1:8000`，切换到「录入」标签页：
+- 拖入或选择一人多张照片（支持批量）
+- 填写身份 ID 和姓名
+- 点击「录入底库」
+
+### 方式二：Python 脚本批量注册
+
+可以用 Python 脚本调用 `/register/batch` 接口，适合整理大量身份时使用：
+
+```python
+import requests
+from pathlib import Path
+
+API = "http://127.0.0.1:8000"
+
+# 为 identity p21 注册 3 张照片
+identity_dir = Path("dataset/registered/p21")
+files = [
+    ("files", (p.name, p.read_bytes(), "image/jpeg"))
+    for p in identity_dir.glob("*.jpg")
+]
+resp = requests.post(
+    f"{API}/register/batch",
+    data={"identity_id": "p21", "name": "张三"},
+    files=files,
+)
+print(resp.json())  # → {"identity_id": "p21", "name": "张三", "saved": 3}
+```
+
+### 注册集目录结构约定
+
+```
+dataset/
+|-- identities.csv              # 身份映射表（注册脚本自动更新）
+`-- registered/
+    |-- p01/
+    |   |-- p01_r01.jpg
+    |   |-- p01_r02.jpg
+    |   `-- p01_r03.jpg
+    |-- p02/
+    |   `-- ...
+    `-- p21/                     # 新身份
+        |-- p21_r01.jpg
+        `-- p21_r02.jpg
+```
+
+`identities.csv` 格式为 `identity_id,name,domain`，每注册一个新身份时后端自动追加一行。
+
+---
+
+## 通过 API 编写批量测试脚本（给负责评测的同学）
+
+### 核心思路
+
+1. **启动服务** → `python scripts/run_dev.py --model-path <buffalo_l路径>`
+2. **注册数据** → 通过 `/register/batch` 导入所有注册照
+3. **遍历测试图** → 逐张调 `/recognize` 获取检测结果
+4. **对比标注** → 拿 API 返回的 `bbox` / `identity_id` / `similarity` 与 `annotation.json` 做配对
+5. **计算指标** → 统计 top-1 准确率、检测召回率、unknown 准确率等
+
+### 简单示例：遍历测试图并收集结果
+
+```python
+import requests, json
+from pathlib import Path
+
+API = "http://127.0.0.1:8000"
+results = {}
+
+for img_path in Path("dataset/test/images").glob("*.jpg"):
+    with open(img_path, "rb") as f:
+        resp = requests.post(f"{API}/recognize", files={"file": f})
+    results[img_path.name] = resp.json()
+
+with open("results.json", "w") as f:
+    json.dump(results, f, indent=2, ensure_ascii=False)
+```
+
+### 检查服务状态
+
+```python
+health = requests.get(f"{API}/health").json()
+print(health)  # → {"status": "ok"}
+
+# 确认底库中已有多少身份
+identities = requests.get(f"{API}/identities").json()
+print(len(identities["identities"]))  # → 已注册身份数
+```
 
 ## 数据与评测
 
