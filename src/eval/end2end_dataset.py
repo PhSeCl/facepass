@@ -47,6 +47,13 @@ def _resolve_image_path(test_root: Path, image_reference: str, source_label: str
     fallback = test_root / "images" / image_reference
     if fallback.exists():
         return fallback
+
+    # annotation 中的 image 可能是相对于 dataset 根 (如 test/images/xxx.jpg),
+    # 而 test_root 已经是 test/ 目录，需在 test_root.parent 下尝试
+    parent_fallback = test_root.parent / image_reference
+    if parent_fallback.exists():
+        return parent_fallback
+
     raise FileNotFoundError(f"标注引用的图片不存在: {image_reference} ({source_label})")
 
 

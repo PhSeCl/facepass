@@ -361,6 +361,18 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/identity/{identity_id}/image")
+def identity_image(identity_id: str):
+    identity_dir = settings.registered_dir / identity_id
+    if not identity_dir.exists() or not identity_dir.is_dir():
+        raise HTTPException(status_code=404, detail={"message": f"身份不存在: {identity_id}"})
+    image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+    for child in sorted(identity_dir.iterdir()):
+        if child.suffix.lower() in image_extensions:
+            return FileResponse(child, media_type=f"image/{child.suffix.lstrip('.').replace('jpg', 'jpeg')}")
+    raise HTTPException(status_code=404, detail={"message": f"身份 {identity_id} 没有注册图片"})
+
+
 @app.get("/identities", response_model=IdentitiesResponse)
 def identities() -> IdentitiesResponse:
     summaries = [

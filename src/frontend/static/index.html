@@ -703,6 +703,59 @@
         padding: 1px 6px;
       }
     }
+
+    /* Eval Metrics */
+    .eval-summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+    }
+
+    .eval-metric {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      text-align: center;
+    }
+
+    .eval-metric-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: -0.5px;
+    }
+
+    .eval-metric-label {
+      font-size: 12px;
+      color: var(--text2);
+      margin-top: 4px;
+    }
+
+    .eval-metric.green .eval-metric-value {
+      color: var(--green);
+    }
+
+    .eval-metric.red .eval-metric-value {
+      color: var(--red);
+    }
+
+    .plot-img {
+      width: 100%;
+      border-radius: var(--radius-sm);
+      margin-bottom: 12px;
+      border: 1px solid var(--border);
+    }
+
+    /* Gallery photo in recognize results */
+    .gallery-photo {
+      width: 72px;
+      height: 72px;
+      border-radius: var(--radius-sm);
+      object-fit: cover;
+      border: 1px solid var(--border);
+      flex-shrink: 0;
+    }
   </style>
 </head>
 
@@ -723,6 +776,7 @@
       <button class="tab active" onclick="switchTab('recognize')">识别</button>
       <button class="tab" onclick="switchTab('register')">录入</button>
       <button class="tab" onclick="switchTab('gallery')">底库</button>
+      <button class="tab" onclick="switchTab('eval')">评估</button>
     </div>
 
     <!-- ========== Recognize Tab ========== -->
@@ -795,17 +849,56 @@
         </div>
       </div>
     </div>
+
+    <!-- ========== Eval Tab ========== -->
+    <div id="tab-eval" style="display:none">
+      <div class="card">
+        <div class="card-title">批量评估</div>
+        <div class="upload-zone" id="evalDropZone" onclick="document.getElementById('evalInput').click()">
+          <svg class="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+          </svg>
+          <div class="upload-text">点击或拖拽上传测试数据集 ZIP</div>
+          <div class="upload-hint">ZIP 格式 · 包含 registered/ 和 test/ 目录及标注文件</div>
+        </div>
+        <input type="file" id="evalInput" accept=".zip" style="display:none" onchange="handleEvalFile(this.files[0])">
+      </div>
+      <div class="card" id="evalInfoCard" style="display:none">
+        <div class="card-title">数据集信息</div>
+        <div id="evalInfoList"></div>
+      </div>
+      <div class="card" style="display:none" id="evalActionCard">
+        <button class="btn btn-primary" id="evalRunBtn" onclick="runEval()">
+          开始评估
+        </button>
+        <span style="margin-left:12px;font-size:13px;color:var(--text2)" id="evalStatus"></span>
+      </div>
+      <div id="evalResult" style="display:none">
+        <div class="card">
+          <div class="card-title">评估结果</div>
+          <div id="evalSummary" class="eval-summary"></div>
+        </div>
+        <div class="card" id="evalPlotsCard" style="display:none">
+          <div class="card-title">可视化图表</div>
+          <div id="evalPlots"></div>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <script>
     const API = 'http://127.0.0.1:8000';
     let recognizeFile = null;
     let registerFiles = [];
+    let evalFile = null;
 
     document.addEventListener('DOMContentLoaded', () => {
       checkHealth();
       setupDragDrop('recognizeDropZone', 'recognizeInput', (files) => handleRecognizeFile(files[0]));
       setupDragDrop('registerDropZone', 'registerInput', (files) => handleRegisterFiles(files));
+      setupDragDrop('evalDropZone', 'evalInput', (files) => handleEvalFile(files[0]));
     });
 
     function setupDragDrop(zoneId, inputId, handler) {
@@ -836,12 +929,13 @@
 
     function switchTab(tab) {
       document.querySelectorAll('.tab').forEach((t, i) => {
-        t.classList.toggle('active', ['recognize', 'register', 'gallery'][i] === tab);
+        t.classList.toggle('active', ['recognize', 'register', 'gallery', 'eval'][i] === tab);
       });
       const panels = {
         recognize: document.getElementById('tab-recognize'),
         register: document.getElementById('tab-register'),
-        gallery: document.getElementById('tab-gallery')
+        gallery: document.getElementById('tab-gallery'),
+        eval: document.getElementById('tab-eval')
       };
       Object.entries(panels).forEach(([key, el]) => {
         el.style.display = key === tab ? '' : 'none';
@@ -938,8 +1032,13 @@
         img.src = imgUrl;
 
         // Results list
-        list.innerHTML = results.map((res, i) => `
+        list.innerHTML = results.map((res, i) => {
+          const galleryImg = !res.is_unknown && res.identity_id !== 'unknown'
+            ? `<img class="gallery-photo" src="${API}/identity/${encodeURIComponent(res.identity_id)}/image" alt="${res.name || res.identity_id}" onerror="this.style.display='none'" loading="lazy">`
+            : '';
+          return `
       <div class="result-card" style="animation-delay:${i * 0.08}s">
+        ${galleryImg}
         <div class="result-avatar" style="background:${res.is_unknown ? 'rgba(239,68,68,.1)' : 'rgba(34,197,94,.1)'};color:${res.is_unknown ? 'var(--red)' : 'var(--green)'}">${res.is_unknown ? '?' : (res.name || res.identity_id).charAt(0)}</div>
         <div class="result-info">
           <div class="result-name">
@@ -953,7 +1052,7 @@
           </div>
         </div>
       </div>
-    `).join('');
+    `}).join('');
 
       } catch (e) {
         toast('网络错误，请检查服务是否运行', 'error');
@@ -1061,6 +1160,146 @@
 
       } catch {
         list.innerHTML = '<div class="empty"><div class="empty-icon">---</div><div>无法加载底库，请检查服务</div></div>';
+      }
+    }
+
+    // --- Eval ---
+    function handleEvalFile(file) {
+      if (!file || !file.name.toLowerCase().endsWith('.zip')) {
+        toast('请上传 ZIP 文件', 'error');
+        return;
+      }
+      evalFile = file;
+      const zone = document.getElementById('evalDropZone');
+      zone.classList.add('has-image');
+      zone.innerHTML = `<div style="padding:24px;text-align:center"><div style="font-size:14px;color:var(--text)">${file.name}</div><div style="font-size:12px;color:var(--text2);margin-top:4px">${(file.size / 1024 / 1024).toFixed(1)} MB</div><div class="preview-actions"><button class="preview-btn" onclick="event.stopPropagation();clearEval()"><svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button></div></div>`;
+      zone.onclick = null;
+
+      // Inspect dataset
+      inspectEvalDataset();
+    }
+
+    function clearEval() {
+      evalFile = null;
+      const zone = document.getElementById('evalDropZone');
+      zone.classList.remove('has-image');
+      zone.innerHTML = `<svg class="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg><div class="upload-text">点击或拖拽上传测试数据集 ZIP</div><div class="upload-hint">ZIP 格式 · 包含 registered/ 和 test/ 目录及标注文件</div>`;
+      zone.onclick = () => document.getElementById('evalInput').click();
+      document.getElementById('evalInfoCard').style.display = 'none';
+      document.getElementById('evalActionCard').style.display = 'none';
+      document.getElementById('evalResult').style.display = 'none';
+    }
+
+    async function inspectEvalDataset() {
+      if (!evalFile) return;
+      const form = new FormData();
+      form.append('file', evalFile);
+
+      try {
+        const r = await fetch(API + '/dataset-eval/inspect', { method: 'POST', body: form });
+        const data = await r.json();
+        const infoCard = document.getElementById('evalInfoCard');
+        const infoList = document.getElementById('evalInfoList');
+        const actionCard = document.getElementById('evalActionCard');
+
+        infoCard.style.display = '';
+        infoList.innerHTML = `<div class="identity-row" style="animation-delay:0s">
+          <div class="identity-row-left">
+            <div class="identity-avatar" style="background:${data.has_registered ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)'};color:${data.has_registered ? 'var(--green)' : 'var(--red)'}">${data.has_registered ? '\u2713' : '\u2717'}</div>
+            <div>
+              <div class="identity-name">${data.has_registered ? '数据集包含注册集目录' : '数据集不包含注册集目录（将使用本地底库）'}</div>
+              <div class="identity-meta">布局检测</div>
+            </div>
+          </div>
+        </div>`;
+
+        if (!r.ok) {
+          toast(data.message || '数据集检查失败', 'error');
+          actionCard.style.display = 'none';
+          return;
+        }
+
+        actionCard.style.display = '';
+        document.getElementById('evalStatus').textContent = '';
+      } catch (e) {
+        toast('网络错误，请检查服务是否运行', 'error');
+      }
+    }
+
+    async function runEval() {
+      if (!evalFile) return;
+
+      const btn = document.getElementById('evalRunBtn');
+      const status = document.getElementById('evalStatus');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> 评估中...';
+      status.textContent = '这可能需要几分钟，请耐心等待...';
+
+      const form = new FormData();
+      form.append('file', evalFile);
+      form.append('gallery_choice', 'local');
+
+      try {
+        const r = await fetch(API + '/dataset-eval/run', { method: 'POST', body: form });
+        const data = await r.json();
+
+        if (!r.ok) {
+          toast(data.message || '评估失败', 'error');
+          status.textContent = '';
+          btn.disabled = false;
+          btn.innerHTML = '开始评估';
+          return;
+        }
+
+        // Show results
+        const resultDiv = document.getElementById('evalResult');
+        const summaryDiv = document.getElementById('evalSummary');
+        resultDiv.style.display = '';
+
+        const m = data.metrics;
+        const metrics = [
+          { label: 'Strict Top-1 准确率', value: (m.strict_top1_accuracy * 100).toFixed(1) + '%', cls: m.strict_top1_accuracy > 0.5 ? 'green' : 'red' },
+          { label: 'Matched Top-1 准确率', value: (m.matched_top1_accuracy * 100).toFixed(1) + '%', cls: m.matched_top1_accuracy > 0.5 ? 'green' : 'red' },
+          { label: '检测召回率', value: (m.detection_recall * 100).toFixed(1) + '%', cls: m.detection_recall > 0.5 ? 'green' : 'red' },
+          { label: '检测精确率', value: (m.detection_precision * 100).toFixed(1) + '%', cls: m.detection_precision > 0.5 ? 'green' : 'red' },
+          { label: '未知检测准确率', value: (m.unknown_detected_accuracy * 100).toFixed(1) + '%', cls: m.unknown_detected_accuracy > 0.5 ? 'green' : 'red' },
+          { label: '预测未知精确率', value: (m.predicted_unknown_precision * 100).toFixed(1) + '%', cls: m.predicted_unknown_precision > 0.5 ? 'green' : 'red' },
+        ];
+
+        summaryDiv.innerHTML = `<div class="eval-summary">${metrics.map(mt => `
+          <div class="eval-metric ${mt.cls}">
+            <div class="eval-metric-value">${mt.value}</div>
+            <div class="eval-metric-label">${mt.label}</div>
+          </div>
+        `).join('')}</div>`;
+
+        // Show plots
+        if (data.plots) {
+          const plotsCard = document.getElementById('evalPlotsCard');
+          const plotsDiv = document.getElementById('evalPlots');
+          plotsCard.style.display = '';
+
+          let plotsHtml = '';
+          if (data.plots.confusion_matrix) {
+            plotsHtml += `<img class="plot-img" src="${data.plots.confusion_matrix}" alt="混淆矩阵">`;
+          }
+          if (data.plots.detection_metrics) {
+            plotsHtml += `<img class="plot-img" src="${data.plots.detection_metrics}" alt="检测指标">`;
+          }
+          if (data.plots.accuracy_metrics) {
+            plotsHtml += `<img class="plot-img" src="${data.plots.accuracy_metrics}" alt="准确率指标">`;
+          }
+          plotsDiv.innerHTML = plotsHtml;
+        }
+
+        status.textContent = '评估完成';
+        toast('评估完成', 'success');
+      } catch (e) {
+        toast('网络错误或评估超时', 'error');
+        status.textContent = '';
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '开始评估';
       }
     }
   </script>
