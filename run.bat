@@ -1,9 +1,8 @@
 @echo off
-chcp 65001 >nul
 setlocal
 cd /d "%~dp0"
 
-REM 1) 选择启动器：优先 uv，没有 uv 则退回系统 python
+REM 1) Pick a launcher: prefer uv, fall back to system python.
 set "LAUNCHER="
 where uv >nul 2>nul && set "LAUNCHER=uv run python"
 if not defined LAUNCHER (
@@ -11,8 +10,8 @@ if not defined LAUNCHER (
 )
 
 if not defined LAUNCHER (
-    echo [错误] 未找到 uv，也未找到 python，无法启动 FacePass。
-    echo 请安装其一：
+    echo [ERROR] Neither uv nor python was found. Cannot start FacePass.
+    echo Please install one of:
     echo   uv      https://docs.astral.sh/uv/
     echo   Python  https://www.python.org/
     echo.
@@ -21,29 +20,30 @@ if not defined LAUNCHER (
 )
 
 if "%LAUNCHER%"=="python" (
-    echo [提示] 未找到 uv，已改用系统 python 运行。
-    echo 建议安装 uv 以获得一致的依赖环境（uv sync 可自动装齐依赖）。
+    echo [INFO] uv not found, falling back to system python.
+    echo        Installing uv is recommended for a consistent env ^(uv sync^).
     echo.
 )
 
-REM 2) 缺少 config.toml 会导致后端找不到模型路径而启动失败，提前提示
+REM 2) Missing config.toml means the backend cannot resolve a model path.
 if not exist "config.toml" (
-    echo [警告] 当前目录未找到 config.toml，后端可能因缺少模型路径而启动失败。
-    echo 请在 config.toml 中设置 [model].path 指向 buffalo_l 模型目录。
+    echo [WARN] config.toml not found in this folder.
+    echo        The backend needs a model path to start: set [model].path in
+    echo        config.toml to your buffalo_l model directory.
     echo.
 )
 
-echo 正在启动 FacePass，请稍候...
+echo Starting FacePass...
 echo.
 %LAUNCHER% scripts\run_dev.py
 set "EXITCODE=%errorlevel%"
 
-REM 3) 任何非零退出都停下来显示错误码，避免窗口闪退看不到日志
+REM 3) Pause on any non-zero exit so the error stays visible (no flashing window).
 if not "%EXITCODE%"=="0" (
     echo.
-    echo [错误] FacePass 异常退出，错误码 %EXITCODE%。
-    echo 若上方提示缺少依赖库，请按提示用 uv sync 或 pip install 安装。
-    echo 其它常见原因：config.toml 缺少 [model].path、模型目录不完整。
+    echo [ERROR] FacePass exited with code %EXITCODE%.
+    echo If a missing dependency was listed above, install it with uv sync or pip install.
+    echo Other common causes: config.toml missing [model].path, incomplete model dir.
     echo.
     pause
 )
