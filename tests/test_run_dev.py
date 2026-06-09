@@ -32,6 +32,7 @@ def test_run_dev_passes_model_path_to_backend_env(monkeypatch) -> None:
     result = run_dev.main(["--model-path", "C:/models/buffalo_l"])
 
     assert result == 0
+    # run_dev now only spawns the backend; the frontend is served by FastAPI itself.
+    assert len(popen_calls) == 1
     assert popen_calls[0][0] == ["python", "-m", "uvicorn", "src.backend.api:app", "--port", "8000"]
     assert popen_calls[0][1]["FACEPASS_MODEL_PATH"] == "C:/models/buffalo_l"
-    assert popen_calls[1][0] == ["python", "src/frontend/app.py"]
