@@ -1,5 +1,6 @@
 import csv
 import base64
+import re
 import tempfile
 import os
 import sys
@@ -7,7 +8,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, JSONResponse
+from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.common.errors import (
@@ -39,7 +42,20 @@ from .dataset_import import (
 )
 from .gallery import Gallery
 from .recognizer import Recognizer
-from .schemas import ErrorResponse, IdentitiesResponse, IdentitySummary, RecognitionResultModel
+from .schemas import (
+    BatchRegisterResponse,
+    ConfusionPairModel,
+    DatasetEvalResponse,
+    DatasetInspectResponse,
+    DetectionIssueModel,
+    ErrorResponse,
+    EvalMetricsModel,
+    EvalPlotsModel,
+    IdentitiesResponse,
+    IdentitySummary,
+    RecognitionResultModel,
+    RegisterResponse,
+)
 
 
 logger = get_logger(__name__)
@@ -78,6 +94,10 @@ _gallery: Gallery = Gallery()
 _id2name: dict[str, str] = {}
 
 
+_IDENTITY_ID_PATTERN = re.compile(r"[A-Za-z0-9_-]+")
+_ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+
+
 def load_identities(path: Path | None = None) -> dict[str, str]:
     path = path or settings.identities_csv
     if not path.exists():
@@ -85,6 +105,71 @@ def load_identities(path: Path | None = None) -> dict[str, str]:
         return {}
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         return {row["identity_id"]: row["name"] for row in csv.DictReader(handle)}
+
+
+def _read_identity_rows(path: Path | None = None) -> dict[str, dict[str, str]]:
+    path = path or settings.identities_csv
+    if not path.exists():
+        return {}
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        rows: dict[str, dict[str, str]] = {}
+        for row in csv.DictReader(handle):
+            identity_id = (row.get("identity_id") or "").strip()
+            if not identity_id:
+                continue
+            rows[identity_id] = {
+                "name": row.get("name") or "",
+                "domain": row.get("domain") or "",
+            }
+    return rows
+
+
+def _write_identity_name(identity_id: str, name: str) -> None:
+    """Upsert a single identity name while preserving any existing domain column."""
+    rows = _read_identity_rows()
+    existing = rows.get(identity_id, {})
+    rows[identity_id] = {"name": name, "domain": existing.get("domain", "")}
+    settings.identities_csv.parent.mkdir(parents=True, exist_ok=True)
+    with settings.identities_csv.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["identity_id", "name", "domain"])
+        for iid, data in sorted(rows.items()):
+            writer.writerow([iid, data["name"], data.get("domain", "")])
+    _id2name[identity_id] = name
+
+
+def _validate_identity_id(identity_id: str) -> str:
+    identity_id = identity_id.strip()
+    if not identity_id or not _IDENTITY_ID_PATTERN.fullmatch(identity_id):
+        raise HTTPException(
+            status_code=400,
+            detail={"message": "identity_id 非法：仅允许字母、数字、下划线和连字符，且不能为空"},
+        )
+    return identity_id
+
+
+def _resolve_extension(filename: str | None) -> str:
+    ext = Path(filename or "image.jpg").suffix.lower()
+    return ext if ext in _ALLOWED_IMAGE_EXTS else ".jpg"
+
+
+def _next_registered_index(identity_dir: Path, identity_id: str) -> int:
+    pattern = re.compile(rf"{re.escape(identity_id)}_r(\d+)$")
+    max_index = 0
+    for path in identity_dir.glob(f"{identity_id}_r*"):
+        match = pattern.match(path.stem)
+        if match:
+            max_index = max(max_index, int(match.group(1)))
+    return max_index + 1
+
+
+def _rebuild_gallery(model) -> None:
+    global _gallery, _recognizer
+    _gallery = Gallery()
+    _gallery.build_from_dir(str(settings.registered_dir), model)
+    _gallery.save(settings.gallery_path)
+    _recognizer = Recognizer(model, _gallery, settings.threshold, _id2name)
+    logger.info("底库已更新")
 
 
 def _startup_failure_message(exc: Exception) -> str:
@@ -152,6 +237,22 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="FacePass API", lifespan=lifespan)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+_FRONTEND_HTML = Path(__file__).resolve().parents[1] / "frontend" / "static" / "index.html"
+
+
+@app.get("/")
+def root():
+    if _FRONTEND_HTML.exists():
+        return HTMLResponse(content=_FRONTEND_HTML.read_text(encoding="utf-8"))
+    return HTMLResponse(content="<h2>FacePass API</h2>")
+
 
 @app.exception_handler(ModelLoadError)
 async def model_load_exception_handler(request: Request, exc: ModelLoadError) -> JSONResponse:
@@ -217,9 +318,59 @@ def _render_external_eval_plots(dataset, report) -> dict[str, str]:
         temp_dir.rmdir()
 
 
+def _build_eval_response(result) -> DatasetEvalResponse:
+    """Render plots and assemble the eval response. Runs synchronously (matplotlib);
+    call via run_in_threadpool so it does not block the event loop."""
+    metrics = result.report.metrics
+    plots = _render_external_eval_plots(result.dataset, result.report)
+    return DatasetEvalResponse(
+        gallery_source=result.gallery_source,
+        metrics=EvalMetricsModel(
+            strict_top1_accuracy=metrics.strict_top1_accuracy,
+            matched_top1_accuracy=metrics.matched_top1_accuracy,
+            detection_recall=metrics.detection_recall,
+            detection_precision=metrics.detection_precision,
+            unknown_detected_accuracy=metrics.unknown_detected_accuracy,
+            predicted_unknown_precision=metrics.predicted_unknown_precision,
+        ),
+        plots=EvalPlotsModel(
+            confusion_matrix=plots["confusion_matrix"],
+            detection_metrics=plots["detection_metrics"],
+            accuracy_metrics=plots["accuracy_metrics"],
+        ),
+        confusion_pairs=[
+            ConfusionPairModel(
+                true_identity_id=true_identity_id,
+                predicted_identity_id=predicted_identity_id,
+            )
+            for true_identity_id, predicted_identity_id in result.confusion_pairs
+        ],
+        missed_detections=[
+            DetectionIssueModel(image_name=item.image_name, bbox=list(item.bbox))
+            for item in result.missed_detections
+        ],
+        false_positives=[
+            DetectionIssueModel(image_name=item.image_name, bbox=list(item.bbox))
+            for item in result.false_positives
+        ],
+    )
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/identity/{identity_id}/image")
+def identity_image(identity_id: str):
+    identity_dir = settings.registered_dir / identity_id
+    if not identity_dir.exists() or not identity_dir.is_dir():
+        raise HTTPException(status_code=404, detail={"message": f"身份不存在: {identity_id}"})
+    image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+    for child in sorted(identity_dir.iterdir()):
+        if child.suffix.lower() in image_extensions:
+            return FileResponse(child, media_type=f"image/{child.suffix.lstrip('.').replace('jpg', 'jpeg')}")
+    raise HTTPException(status_code=404, detail={"message": f"身份 {identity_id} 没有注册图片"})
 
 
 @app.get("/identities", response_model=IdentitiesResponse)
@@ -258,11 +409,107 @@ async def recognize(file: UploadFile = File(...)) -> list[RecognitionResultModel
     return [RecognitionResultModel(**result.__dict__) for result in results]
 
 
-@app.post("/dataset-eval/inspect", responses={400: {"model": ErrorResponse}, 413: {"model": ErrorResponse}})
+@app.post(
+    "/register",
+    response_model=RegisterResponse,
+    responses={400: {"model": ErrorResponse}, 413: {"model": ErrorResponse}},
+)
+async def register(
+    file: UploadFile = File(...),
+    identity_id: str = Form(...),
+    name: str = Form(""),
+) -> RegisterResponse:
+    identity_id = _validate_identity_id(identity_id)
+    content = await file.read()
+    if len(content) > settings.max_upload_bytes:
+        raise HTTPException(status_code=413, detail={"message": "上传图片过大"})
+    try:
+        image = safe_load_image(content)
+    except InvalidImageError as exc:
+        logger.warning("拒绝无效注册图片 %s: %s", file.filename, exc)
+        raise HTTPException(status_code=400, detail={"message": str(exc)}) from exc
+
+    recognizer = get_recognizer()
+    if recognizer is None:
+        raise HTTPException(status_code=503, detail={"message": "识别器未初始化"})
+
+    faces = recognizer.model.detect_and_encode(image)
+    if not faces:
+        raise HTTPException(status_code=400, detail={"message": "未检测到人脸"})
+
+    identity_dir = settings.registered_dir / identity_id
+    identity_dir.mkdir(parents=True, exist_ok=True)
+    index = _next_registered_index(identity_dir, identity_id)
+    image_path = identity_dir / f"{identity_id}_r{index:02d}{_resolve_extension(file.filename)}"
+    image_path.write_bytes(content)
+
+    if name:
+        _write_identity_name(identity_id, name)
+
+    _rebuild_gallery(recognizer.model)
+
+    return RegisterResponse(identity_id=identity_id, name=_id2name.get(identity_id, ""))
+
+
+@app.post(
+    "/register/batch",
+    response_model=BatchRegisterResponse,
+    responses={400: {"model": ErrorResponse}, 413: {"model": ErrorResponse}},
+)
+async def register_batch(
+    files: list[UploadFile] = File(...),
+    identity_id: str = Form(...),
+    name: str = Form(""),
+) -> BatchRegisterResponse:
+    identity_id = _validate_identity_id(identity_id)
+    recognizer = get_recognizer()
+    if recognizer is None:
+        raise HTTPException(status_code=503, detail={"message": "识别器未初始化"})
+
+    identity_dir = settings.registered_dir / identity_id
+    identity_dir.mkdir(parents=True, exist_ok=True)
+    next_index = _next_registered_index(identity_dir, identity_id)
+
+    saved = 0
+    for file in files:
+        content = await file.read()
+        if len(content) > settings.max_upload_bytes:
+            continue
+        try:
+            image = safe_load_image(content)
+        except InvalidImageError:
+            continue
+        if not recognizer.model.detect_and_encode(image):
+            continue
+        image_path = identity_dir / f"{identity_id}_r{next_index:02d}{_resolve_extension(file.filename)}"
+        image_path.write_bytes(content)
+        next_index += 1
+        saved += 1
+
+    if saved == 0:
+        raise HTTPException(status_code=400, detail={"message": "没有成功录入任何图片"})
+
+    if name:
+        _write_identity_name(identity_id, name)
+
+    _rebuild_gallery(recognizer.model)
+
+    return BatchRegisterResponse(
+        identity_id=identity_id,
+        name=_id2name.get(identity_id, ""),
+        saved=saved,
+    )
+
+
+@app.post(
+    "/dataset-eval/inspect",
+    response_model=DatasetInspectResponse,
+    responses={400: {"model": ErrorResponse}, 413: {"model": ErrorResponse}},
+)
 async def inspect_dataset_archive(
     file: UploadFile | None = File(None),
     dataset_dir: str | None = Form(None),
-) -> dict[str, bool]:
+) -> DatasetInspectResponse:
     if file is not None and dataset_dir:
         raise HTTPException(status_code=400, detail={"message": "请只提供 zip 或数据集目录中的一种"})
     if file is None and not dataset_dir:
@@ -271,9 +518,10 @@ async def inspect_dataset_archive(
     if dataset_dir:
         validated_dir = _validate_dataset_dir(dataset_dir)
         try:
-            return {"has_registered": inspect_external_dataset_directory(str(validated_dir))}
+            has_registered = inspect_external_dataset_directory(str(validated_dir))
         except (DatasetArchiveError, DatasetLayoutError, FileNotFoundError, ValueError) as exc:
             raise HTTPException(status_code=400, detail={"message": str(exc)}) from exc
+        return DatasetInspectResponse(has_registered=has_registered)
 
     assert file is not None
     content = await _read_upload_limited(file, settings.max_upload_bytes)
@@ -285,15 +533,19 @@ async def inspect_dataset_archive(
         raise HTTPException(status_code=400, detail={"message": str(exc)}) from exc
     finally:
         archive_path.unlink(missing_ok=True)
-    return {"has_registered": has_registered}
+    return DatasetInspectResponse(has_registered=has_registered)
 
 
-@app.post("/dataset-eval/run", responses={400: {"model": ErrorResponse}, 413: {"model": ErrorResponse}})
+@app.post(
+    "/dataset-eval/run",
+    response_model=DatasetEvalResponse,
+    responses={400: {"model": ErrorResponse}, 413: {"model": ErrorResponse}},
+)
 async def evaluate_dataset_archive(
     gallery_choice: str = Form("local"),
     dataset_dir: str | None = Form(None),
     file: UploadFile | None = File(None),
-) -> dict[str, object]:
+) -> DatasetEvalResponse:
     recognizer = get_recognizer()
     if recognizer is None:
         raise HTTPException(status_code=503, detail={"message": "识别器未初始化"})
@@ -306,7 +558,8 @@ async def evaluate_dataset_archive(
     try:
         if dataset_dir:
             validated_dir = _validate_dataset_dir(dataset_dir)
-            result = run_external_eval_from_directory(
+            result = await run_in_threadpool(
+                run_external_eval_from_directory,
                 str(validated_dir),
                 gallery_choice,
                 model=recognizer.model,
@@ -320,7 +573,8 @@ async def evaluate_dataset_archive(
 
             archive_path = _write_temp_upload(content, Path(file.filename or "dataset.zip").suffix or ".zip")
             try:
-                result = run_external_eval(
+                result = await run_in_threadpool(
+                    run_external_eval,
                     archive_path,
                     gallery_choice,
                     model=recognizer.model,
@@ -331,33 +585,6 @@ async def evaluate_dataset_archive(
             finally:
                 archive_path.unlink(missing_ok=True)
 
-        metrics = result.report.metrics
-        return {
-            "gallery_source": result.gallery_source,
-            "metrics": {
-                "strict_top1_accuracy": metrics.strict_top1_accuracy,
-                "matched_top1_accuracy": metrics.matched_top1_accuracy,
-                "detection_recall": metrics.detection_recall,
-                "detection_precision": metrics.detection_precision,
-                "unknown_detected_accuracy": metrics.unknown_detected_accuracy,
-                "predicted_unknown_precision": metrics.predicted_unknown_precision,
-            },
-            "plots": _render_external_eval_plots(result.dataset, result.report),
-            "confusion_pairs": [
-                {
-                    "true_identity_id": true_identity_id,
-                    "predicted_identity_id": predicted_identity_id,
-                }
-                for true_identity_id, predicted_identity_id in result.confusion_pairs
-            ],
-            "missed_detections": [
-                {"image_name": item.image_name, "bbox": list(item.bbox)}
-                for item in result.missed_detections
-            ],
-            "false_positives": [
-                {"image_name": item.image_name, "bbox": list(item.bbox)}
-                for item in result.false_positives
-            ],
-        }
+        return await run_in_threadpool(_build_eval_response, result)
     except (DatasetArchiveError, DatasetLayoutError, FileNotFoundError, ValueError) as exc:
         raise HTTPException(status_code=400, detail={"message": str(exc)}) from exc

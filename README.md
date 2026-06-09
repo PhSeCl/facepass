@@ -1,6 +1,6 @@
 # FacePass - 本地人脸识别系统
 
-FacePass 是一个课程大作业项目，目标是在本地完成图片上传、人脸检测、身份识别与结果可视化。当前版本完成了模型端、后端、前端三层分离的最小闭环，并加入边界错误处理、日志和重试机制。
+FacePass 是一个课程大作业项目，目标是在本地完成图片上传、人脸检测、身份识别与结果可视化。当前版本完成了模型端、后端、前端三层分离的最小闭环，并加入边界错误处理、日志和重试机制。前端已从早期的 Gradio 切换为更美观的纯 HTML + JS 页面，由后端 `GET /` 直接返回，整套服务单进程即可跑起来。
 
 当前模型层支持两种实现：
 
@@ -16,9 +16,13 @@ src/
 |-- backend/             # 后端：Gallery、Recognizer、FastAPI API、配置、外部数据集导入
 |   `-- dataset_import.py # 解析上传的 test.zip / 本机数据集目录并跑外部评测
 |-- eval/                # 评测内核：CelebA / 单脸 / 端到端数据集、指标与出图，被脚本和后端复用
-`-- frontend/            # 前端：Gradio 界面，仅通过 HTTP 调后端
+`-- frontend/
+    |-- app.py           # 旧 Gradio 界面（已弃用，run_dev 不再启动）
+    `-- static/
+        `-- index.html   # 当前 Web 前端，由后端 GET / 直接返回
+run.bat                  # Windows 双击启动入口（自动选 uv / python，缺依赖会提示而非闪退）
 scripts/
-|-- run_dev.py           # 可选的一键开发启动脚本（同时拉起后端与前端）
+|-- run_dev.py           # 一键启动脚本（只启后端，前端由后端内置返回）
 |-- check_runtime.py     # 打印 onnxruntime provider 可用性，确认是否吃到 GPU
 |-- preannotate_test.py  # 为 dataset/test/images 生成预标注草稿
 |-- summarize_test_annotations.py # 统计 test 标注人数并检查漏标/多余标注
@@ -38,7 +42,9 @@ data/
 `-- tmp_*                # 临时样本，不是正式数据集根目录
 models/                  # gallery.pkl 等本地产物，不进 git
 reports/                 # 评测 JSON / PNG 输出，本地产物，不进 git
-tests/                  # 接口、边界和错误路径测试
+tests/                   # 接口、边界和错误路径测试
+requirements.txt         # pip 依赖列表（约束与 pyproject.toml 一致）
+config.example.toml      # 模型路径与阈值的示例配置
 ```
 
 ## 依赖
@@ -51,7 +57,7 @@ uv sync
 
 ### 没有 uv？用 pip
 
-如果你本机没有装 `uv`，可以改用 `pip` + 仓库根的 [`requirements.txt`](/F:/facepass/requirements.txt)，它的依赖约束与 `pyproject.toml` 保持一致：
+如果你本机没有装 `uv`，可以改用 `pip` + 仓库根的 [`requirements.txt`](requirements.txt)，它的依赖约束与 `pyproject.toml` 保持一致：
 
 ```powershell
 python -m venv .venv
@@ -62,8 +68,8 @@ pip install -r requirements.txt
 之后本文档里所有 `uv run python ...` / `uv run uvicorn ...` / `uv run pytest ...` 命令，**把开头的 `uv run` 去掉、直接用激活环境里的 `python` 即可**，例如：
 
 ```powershell
-# uv run python scripts/run_dev.py --model-path ...
-python scripts/run_dev.py --model-path ...
+# uv run python scripts/run_dev.py
+python scripts/run_dev.py
 
 # uv run uvicorn src.backend.api:app --port 8000
 python -m uvicorn src.backend.api:app --port 8000
@@ -72,7 +78,7 @@ python -m uvicorn src.backend.api:app --port 8000
 python -m pytest tests -q
 ```
 
-GPU 切换、`uv pip install` 等小节同样适用：没有 uv 时把 `uv pip install` 换成普通 `pip install` 即可。
+GPU 切换、`uv pip install` 等小节同样适用：没有 uv 时把 `uv pip install` 换成普通 `pip install` 即可。`run.bat` 也会自动处理这一点——找不到 `uv` 时会退回到系统 `python`（见下文“运行”）。
 
 如果你本机已经配好了 NVIDIA 驱动，可以只在**本地当前虚拟环境**里把 ORT 切到 GPU 版，而不用改仓库默认依赖。Windows 上建议把 ORT 和它依赖的 CUDA/cuDNN Python 运行库一起装进 `.venv`：
 
@@ -89,29 +95,37 @@ uv pip install "onnxruntime-gpu[cuda,cudnn]"
 
 运行 `insightface` 模型前，需要你自己准备本地 `buffalo_l` 目录。项目不会再自动下载或托管模型文件。当前适配器按“`buffalo_l` 模型目录本身”加载，不是传 `models_cache` 根目录。
 
-```powershell
-# 1. 准备本地 buffalo_l 模型目录，例如：
-#    F:\InsightFace\models_cache\models\buffalo_l
-#
-# 2. 准备注册集：将 p01..p20 的注册照放到 dataset/registered/p01/ 等目录。
+准备工作：
 
-# 3. 启动后端和前端
+1. 准备本地 `buffalo_l` 模型目录，例如 `F:\InsightFace\models_cache\models\buffalo_l`。
+2. 在项目根的 `config.toml` 里写好 `[model].path`（见下文），或在启动时用 `--model-path` 显式传入。
+3. 准备注册集：将 `p01..p20` 的注册照放到 `dataset/registered/p01/` 等目录。
+
+### 方式一：双击 `run.bat`（Windows 最简单）
+
+直接双击仓库根的 `run.bat` 即可启动。它做了健壮性处理，**不会再出现“终端一闪而过”**：
+
+- 优先用 `uv run python` 启动；**找不到 `uv` 时自动退回系统 `python`**；两者都没有才提示去安装。
+- 启动前预检依赖，**缺哪个库就按 pip 包名逐条打印**（并给出 `uv sync` / `pip install ...` 建议），而不是抛一堆 traceback。
+- 缺少 `config.toml`、或进程异常退出时，会**停下来显示错误码与常见原因**，方便排查。
+
+启动后浏览器打开 `http://127.0.0.1:8000` 即是 Web 界面。
+
+### 方式二：命令行启动
+
+```powershell
+# 一键启动（只启后端，Web 前端由后端 GET / 直接返回）
+uv run python scripts/run_dev.py
+
+# 需要临时指定模型目录时
 uv run python scripts/run_dev.py --model-path F:\InsightFace\models_cache\models\buffalo_l
 
-# 或者只启动后端
+# 或手动起后端
 $env:FACEPASS_MODEL_PATH = "F:\InsightFace\models_cache\models\buffalo_l"
 uv run uvicorn src.backend.api:app --port 8000
-
-# 另开终端启动前端
-uv run python src/frontend/app.py
 ```
 
-`run_dev.py` 会同时启动：
-
-- FastAPI 后端：`http://127.0.0.1:8000`
-- Gradio 前端：`http://127.0.0.1:7860`
-
-浏览器应打开 `7860`。`8000` 只提供 API，所以直接访问 `GET /` 或请求 `/favicon.ico` 返回 `404` 是预期行为，不代表后端启动失败。
+`run_dev.py` **只启动 FastAPI 后端**，Web 前端由 `GET http://127.0.0.1:8000/` 直接返回，无需再单独启动 Gradio。早期的 `src/frontend/app.py`（Gradio）已弃用。
 
 如果路径校验通过，显式传入的模型目录会被写入项目根的 `config.toml`。TOML 里建议使用正斜杠：
 
@@ -123,7 +137,7 @@ path = "F:/InsightFace/models_cache/models/buffalo_l"
 threshold = 0.30
 ```
 
-也可以参考并复制仓库里的 [`config.example.toml`](/F:/facepass/config.example.toml)：
+也可以参考并复制仓库里的 [`config.example.toml`](config.example.toml)：
 
 ```toml
 [model]
@@ -165,31 +179,284 @@ curl http://127.0.0.1:8000/health
 
 ## API
 
-- `GET /health`：返回服务状态。
-- `GET /identities`：返回身份库中每个身份的原型向量数量与有效注册图数量。
-- `POST /recognize`：multipart 上传图片，返回 `RecognitionResult` 列表。
-- `POST /dataset-eval/inspect`：检查上传的 `test.zip`（`file`）或本机数据集目录（`dataset_dir` 表单字段）布局是否合法，返回 `{"has_registered": bool}`，表示该数据集是否自带注册集。两者只能二选一。
-- `POST /dataset-eval/run`：对 `test.zip`（`file`）或本机数据集目录（`dataset_dir`）跑端到端评测。`gallery_choice` 表单字段选择用 `local`（仓库注册集）还是数据集自带的注册集建库，返回评测指标、混淆对、漏检/误检列表以及内联（base64 data URL）的混淆矩阵、检测、准确率三张图。供 Gradio「数据集演示」页调用。
+所有接口返回 JSON，错误时格式为 `{"message": "..."}` 。
 
-`GET /identities` 当前字段：
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/` | 返回 Web 前端页面（`index.html`） |
+| `GET` | `/health` | 服务存活检查，返回 `{"status":"ok"}` |
+| `GET` | `/identities` | 列出底库中所有已注册身份 |
+| `POST` | `/recognize` | 上传图片，检测人脸并返回识别结果 |
+| `POST` | `/register` | 上传单张图片，注册人脸到指定身份 |
+| `POST` | `/register/batch` | 批量上传图片，注册到同一身份 |
+| `POST` | `/dataset-eval/inspect` | 检查上传的 `test.zip` 或本机数据集目录布局是否合法 |
+| `POST` | `/dataset-eval/run` | 对 `test.zip` 或本机数据集目录跑端到端评测，返回指标与内联图 |
 
-- `identity_id`
-- `name`
-- `count`：兼容字段，等于 `prototype_count`
-- `prototype_count`：当前身份实际参与检索的原型向量数
-- `valid_image_count`：通过校验并参与建库的注册图数量
+> 所有响应均带 Pydantic `response_model`，结构稳定，前端不需要猜字段。
 
-`RecognitionResult` 字段保持为：
+---
 
-- `bbox`: `(x, y, w, h)`
-- `identity_id`: 命中身份或 `unknown`
-- `name`: 显示名，unknown 时为 `null`
-- `similarity`: 相似度
-- `is_unknown`: 是否为 unknown
+### `GET /health`
+
+```
+GET http://127.0.0.1:8000/health
+→ {"status": "ok"}
+```
+
+---
+
+### `GET /identities`
+
+返回底库中全部身份信息：
+
+```json
+{
+  "identities": [
+    {
+      "identity_id": "p01",
+      "name": "成龙",
+      "count": 1,
+      "prototype_count": 1,
+      "valid_image_count": 3
+    }
+  ]
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `identity_id` | `string` | 身份 ID |
+| `name` | `string \| null` | 显示名（来自 `identities.csv`） |
+| `count` | `int` | 兼容字段，等于 `prototype_count` |
+| `prototype_count` | `int` | 原型向量数 |
+| `valid_image_count` | `int` | 该身份的有效注册图数量 |
+
+---
+
+### `POST /recognize`
+
+上传一张图片，检测其中所有人脸并返回识别结果。
+
+**请求**：`multipart/form-data`
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `file` | `file` | 是 | 图片文件（JPG/PNG/WEBP，≤10MB） |
+
+**成功响应 (200)**：
+
+```json
+[
+  {
+    "bbox": [120, 80, 200, 240],
+    "identity_id": "p01",
+    "name": "成龙",
+    "similarity": 0.873,
+    "is_unknown": false
+  },
+  {
+    "bbox": [400, 60, 180, 220],
+    "identity_id": "unknown",
+    "name": null,
+    "similarity": 0.215,
+    "is_unknown": true
+  }
+]
+```
+
+字段说明：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `bbox` | `[int,int,int,int]` | 人脸框 `[x, y, width, height]` |
+| `identity_id` | `string` | 匹配到的身份 ID，未匹配时为 `"unknown"` |
+| `name` | `string \| null` | 匹配身份的显示名，unknown 时为 `null` |
+| `similarity` | `float` | 与底库最佳匹配的余弦相似度 |
+| `is_unknown` | `bool` | 是否低于阈值被判定为 unknown |
+
+**错误**：
+- `400` — 图片格式无效或未检测到人脸
+- `413` — 图片超过 10MB
+
+---
+
+### `POST /register`
+
+上传单张图片，注册到指定身份。注册成功后自动重建底库，无需重启。
+
+**请求**：`multipart/form-data`
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `file` | `file` | 是 | 人脸照片 |
+| `identity_id` | `string` | 是 | 身份 ID，例如 `p21`（仅允许字母、数字、下划线、连字符，不能为空） |
+| `name` | `string` | 否 | 显示名，会写入 `identities.csv` |
+
+**成功响应 (200)**：
+
+```json
+{
+  "identity_id": "p21",
+  "name": "张三"
+}
+```
+
+**错误**：
+- `400` — 图片无效 / 未检测到人脸 / `identity_id` 非法
+- `413` — 图片过大
+- `503` — 识别器未初始化
+
+---
+
+### `POST /register/batch`
+
+批量上传多张图片，全部注册到同一个身份。适合注册集整理时批量导入。
+
+**请求**：`multipart/form-data`
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `files` | `file[]` | 是 | 多张人脸照片 |
+| `identity_id` | `string` | 是 | 目标身份 ID（命名约束同上） |
+| `name` | `string` | 否 | 显示名 |
+
+**成功响应 (200)**：
+
+```json
+{
+  "identity_id": "p21",
+  "name": "张三",
+  "saved": 3
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `identity_id` | `string` | 身份 ID |
+| `name` | `string` | 显示名 |
+| `saved` | `int` | 成功录入的图片数量 |
+
+**错误**：
+- `400` — 没有一张图片成功录入（全部没人脸或格式错误）/ `identity_id` 非法
+- `413` — 有图片超过 10MB
+- `503` — 识别器未初始化
+
+---
+
+### `POST /dataset-eval/inspect` 与 `POST /dataset-eval/run`
+
+对一份外部数据集（上传的 `test.zip`，或本机数据集目录绝对路径 `dataset_dir`，二选一）做端到端评测。
+
+- `inspect`：仅检查布局是否合法，返回 `{"has_registered": bool}`，表示该数据集是否自带注册集。
+- `run`：`gallery_choice` 表单字段选择用 `local`（仓库注册集）还是数据集自带注册集建库；返回评测指标、混淆对、漏检/误检列表，以及内联（base64 data URL）的混淆矩阵、检测、准确率三张图。
+
+这两个接口当前主要由脚本与历史 Gradio 页驱动；新的 HTML 前端尚未接入数据集评测页（计划中）。批量评测推荐直接走脚本 [`scripts/eval_end2end.py`](scripts/eval_end2end.py)（见下文“数据与评测”）。
+
+---
+
+## 注册新身份（给负责增加数据的同学）
+
+### 方式一：Web 界面（推荐）
+
+启动服务后打开 `http://127.0.0.1:8000`，界面有「识别 / 录入 / 底库」三个标签页。切到「录入」：
+
+- 拖入或选择一人多张照片（支持批量）
+- 填写身份 ID 和姓名
+- 点击「录入底库」，完成后可在「底库」页看到更新
+
+### 方式二：Python 脚本批量注册
+
+可以用 Python 脚本调用 `/register/batch` 接口，适合整理大量身份时使用：
+
+```python
+import requests
+from pathlib import Path
+
+API = "http://127.0.0.1:8000"
+
+# 为 identity p21 注册 3 张照片
+identity_dir = Path("dataset/registered/p21")
+files = [
+    ("files", (p.name, p.read_bytes(), "image/jpeg"))
+    for p in identity_dir.glob("*.jpg")
+]
+resp = requests.post(
+    f"{API}/register/batch",
+    data={"identity_id": "p21", "name": "张三"},
+    files=files,
+)
+print(resp.json())  # → {"identity_id": "p21", "name": "张三", "saved": 3}
+```
+
+### 注册集目录结构约定
+
+```
+dataset/
+|-- identities.csv              # 身份映射表（注册脚本自动更新）
+`-- registered/
+    |-- p01/
+    |   |-- p01_r01.jpg
+    |   |-- p01_r02.jpg
+    |   `-- p01_r03.jpg
+    |-- p02/
+    |   `-- ...
+    `-- p21/                     # 新身份
+        |-- p21_r01.jpg
+        `-- p21_r02.jpg
+```
+
+`identities.csv` 格式为 `identity_id,name,domain`，每注册一个新身份时后端自动 upsert 一行，并保留原有的 `domain` 列不被清空。
+
+---
+
+## 通过 API 编写批量测试脚本（给负责评测的同学）
+
+### 核心思路
+
+1. **启动服务** → 双击 `run.bat` 或 `uv run python scripts/run_dev.py`
+2. **注册数据** → 通过 `/register/batch` 导入所有注册照
+3. **遍历测试图** → 逐张调 `/recognize` 获取检测结果
+4. **对比标注** → 拿 API 返回的 `bbox` / `identity_id` / `similarity` 与 `annotation.json` 做配对
+5. **计算指标** → 统计 top-1 准确率、检测召回率、unknown 准确率等
+
+### 简单示例：遍历测试图并收集结果
+
+```python
+import requests, json
+from pathlib import Path
+
+API = "http://127.0.0.1:8000"
+results = {}
+
+for img_path in Path("dataset/test/images").glob("*.jpg"):
+    with open(img_path, "rb") as f:
+        resp = requests.post(f"{API}/recognize", files={"file": f})
+    results[img_path.name] = resp.json()
+
+with open("results.json", "w") as f:
+    json.dump(results, f, indent=2, ensure_ascii=False)
+```
+
+### 检查服务状态
+
+```python
+health = requests.get(f"{API}/health").json()
+print(health)  # → {"status": "ok"}
+
+# 确认底库中已有多少身份
+identities = requests.get(f"{API}/identities").json()
+print(len(identities["identities"]))  # → 已注册身份数
+```
+
+> 不想自己写配对逻辑时，直接用现成脚本 `scripts/eval_end2end.py` 即可得到完整指标与混淆矩阵（见下文）。
 
 ## 数据与评测
 
-当前仓库内 `dataset/test` 的正式标注文件是 [dataset/test/annotation.json](/F:/facepass/dataset/test/annotation.json)，格式是“按图片名分组”的 JSON 对象：
+当前仓库内 `dataset/test` 的正式标注文件是 [dataset/test/annotation.json](dataset/test/annotation.json)，格式是“按图片名分组”的 JSON 对象：
 
 ```json
 {
@@ -218,11 +485,11 @@ curl http://127.0.0.1:8000/health
 
 推荐流程：
 
-1. 把图片放进 [dataset/test/images](/F:/facepass/dataset/test/images)。
+1. 把图片放进 [dataset/test/images](dataset/test/images)。
    - 单人照命名为 `pXX_tNN.jpg`，例如 `p06_t02.jpg`。
    - 合照命名为 `group_NN.jpg`。
    - 不要提交自己都看不懂含义的文件名。
-2. 同一个提交里更新 [dataset/test/annotation.json](/F:/facepass/dataset/test/annotation.json)。
+2. 同一个提交里更新 [dataset/test/annotation.json](dataset/test/annotation.json)。
    - 顶层 key 必须和图片文件名完全一致。
    - 单人照也必须显式写 bbox 和 identity，不要靠文件名猜。
    - 不确定身份就先写 `unknown`，不要为了“看起来完整”硬写某个 `pXX`。
@@ -252,19 +519,17 @@ uv run python scripts/summarize_test_annotations.py
 - `dataset/`：真实实验数据目录，当前已纳入版本控制；其中 `dataset/registered` 已准备完毕，`dataset/test` 当前主要包含测试图。
 - `data/`：仓库内测试与脚本 fixture 目录，主要放临时合成样本和 `.gitkeep`，不是正式数据集根目录。
 
-Gradio 前端的“数据集演示”页现在支持两种输入：
+外部数据集（`/dataset-eval/*` 接口）支持两种输入：
 
 - `ZIP`：上传较小的 `test.zip`。
-- `文件夹`：直接输入本机绝对路径，例如 `F:\datasets\my_eval`。
-
-文件夹模式不会弹系统原生资源管理器。这不是业务限制，而是纯浏览器 + Gradio 方案无法可靠暴露任意本机绝对目录路径；因此前端只把路径字符串发给后端，再由后端直接从本机磁盘读取。
+- `文件夹`：直接传本机绝对路径，例如 `F:\datasets\my_eval`。纯浏览器无法可靠暴露任意本机绝对目录，因此目录模式只把路径字符串发给后端，再由后端从本机磁盘读取。
 
 文件夹模式只接受两种明确布局，不再递归猜目录：
 
 - 选中的目录本身就是测试目录：目录下直接有 `images/` 与一个标注文件。
 - 选中的是数据集根目录：目录下直接有 `test/images/` 与对应标注文件。
 
-目前仓库内有三类相关入口：
+仓库内相关脚本入口：
 
 - `scripts/preannotate_test.py`：对 `dataset/test/images` 跑预标注，生成待人工核对的 `annotation.json` 草稿。
 - `scripts/summarize_test_annotations.py`：统计当前 test 标注里每个 `pXX` 的出现次数，并检查图片与标注是否一一对应。
@@ -396,8 +661,8 @@ uv run python scripts/check_celeba_leakage.py --data-dir celeba_100_identities_3
 
 错误按三档处理：
 
-- 致命错误：后端启动阶段模型加载失败、身份库不存在且无法构建、身份库为空，会记录清晰错误并以非零状态退出。
-- 瞬时错误：前端请求后端、HF 下载等 IO/网络操作使用有限次数指数退避重试；耗尽后返回友好提示，不让前端进程退出。
+- 致命错误：后端启动阶段模型加载失败、身份库不存在且无法构建、身份库为空，会记录清晰错误并以非零状态退出（`run.bat` 会捕获并停留显示）。
+- 瞬时错误：IO/网络操作使用有限次数指数退避重试；耗尽后返回友好提示，不让进程直接崩掉。
 - 可恢复输入错误：坏图片、空文件、非图片、单张注册图读取失败不重试；API 返回 400/413，建库时跳过坏图并继续。
 
 ## 本地模型与大文件
@@ -427,20 +692,20 @@ uv run pytest tests -q
 - Gallery 注册、保存、加载、最大相似度匹配。
 - Gallery 空库匹配返回空结果，unknown 语义由 Recognizer 统一持有。
 - Recognizer 阈值判定和 unknown 输出。
-- API 健康检查、身份列表、坏图片 400、正常图片 200。
+- API 健康检查、身份列表、坏图片 400、正常图片 200、注册接口。
 - `load_identities` 支持注入路径，不再绑定定义时默认配置。
 - `safe_load_image` 坏图/空文件处理。
 - `with_retry` 只重试瞬时异常，不重试 `ValueError`。
-- 前端后端不可达时返回友好提示。
 - `FakeFaceModel` 可在不下载权重的情况下完整跑通建库和 `/recognize` HTTP 流程。
 - 多脸端到端评测的 IoU 配对、严格/宽松 top-1、unknown 指标、漏检/误检日志与 bench 脚本产图。
 - CelebA 子集数据集加载、单脸 top-1 评测与 `eval_celeba.py` 脚本，泄漏检查脚本。
 - 外部数据集导入（`test.zip` / 本机目录）的布局解析、`/dataset-eval/inspect` 与 `/dataset-eval/run` 接口。
-- `check_runtime.py` provider 诊断脚本。
+- `run_dev.py` 启动后端、`check_runtime.py` provider 诊断脚本。
 - 后端不导入具体模型实现，前端不导入任何 `src.*` 内部模块。
 
 ## 待填项
 
+- 给新的 HTML 前端补上“数据集评测”页，接入已就绪的 `/dataset-eval/*` 接口。
 - 持续维护 `dataset/test/annotation.json`，确保新增图片和标注始终同步提交。
 - 基于注册集内部相似度分布确定最终 unknown 阈值，不能用测试集调参。
 - 最终提交前按课程要求补充打包脚本和报告。
