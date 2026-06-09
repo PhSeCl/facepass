@@ -244,8 +244,8 @@ Gradio 前端的“数据集演示”页现在支持两种输入：
 <!-- TEST_ANNOTATION_COUNTS:START -->
 当前 [dataset/test/annotation.json](dataset/test/annotation.json) 统计如下：
 
-- 标注图片数：`64`
-- 标注人脸总数：`163`
+- 标注图片数：`66`
+- 标注人脸总数：`165`
 - 其中 `unknown`：`97`
 - 图片目录：`dataset/test/images`
 - 缺少标注的图片：`0`
@@ -275,8 +275,8 @@ uv run python scripts/summarize_test_annotations.py --write-readme
 | p12 | 3 |
 | p13 | 3 |
 | p14 | 3 |
-| p15 | 3 |
-| p16 | 4 |
+| p15 | 4 |
+| p16 | 5 |
 | p17 | 3 |
 | p18 | 3 |
 | p19 | 3 |
