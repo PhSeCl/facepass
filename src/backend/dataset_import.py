@@ -297,68 +297,25 @@ def _collect_detection_issues(report: EndToEndEvalReport, dataset: GroupedSelfDa
     return missed_detections, false_positives
 
 
-def run_external_eval(
-    zip_path: str | Path,
-    gallery_choice: str,
+def _evaluate_located_dataset(
     *,
+    annotation_path: Path,
+    dataset_root: Path,
+    archive_registered_dir: Path | None,
+    gallery_choice: str,
     model: FaceModel,
     threshold: float,
     local_registered_root: str | Path,
-    local_gallery: Gallery | None = None,
+    local_gallery: Gallery | None,
 ) -> ExternalEvalResult:
-    extracted_root: Path | None = None
-    try:
-        extracted = extract_dataset_archive(zip_path)
-        extracted_root = extracted.extracted_root
-        gallery_source, registered_root = _resolve_registered_root(
-            extracted.registered_dir,
-            gallery_choice,
-            Path(local_registered_root),
-        )
-        dataset = load_grouped_self_dataset(
-            annotations_path=extracted.annotation_path,
-            test_root=extracted.dataset_root,
-            registered_root=registered_root,
-        )
-        dataset = _with_registered_root(dataset, registered_root)
-        report = evaluate_end2end(
-            dataset=dataset,
-            model=model,
-            threshold=threshold,
-            gallery=local_gallery if gallery_source == "local" else None,
-        )
-        missed_detections, false_positives = _collect_detection_issues(report, dataset)
-        return ExternalEvalResult(
-            gallery_source=gallery_source,
-            dataset=dataset,
-            report=report,
-            confusion_pairs=report.metrics.confusion_pairs,
-            missed_detections=missed_detections,
-            false_positives=false_positives,
-        )
-    finally:
-        if extracted_root is not None:
-            shutil.rmtree(extracted_root, ignore_errors=True)
-
-
-def run_external_eval_from_directory(
-    dataset_dir: str | Path,
-    gallery_choice: str,
-    *,
-    model: FaceModel,
-    threshold: float,
-    local_registered_root: str | Path,
-    local_gallery: Gallery | None = None,
-) -> ExternalEvalResult:
-    located = locate_external_dataset_directory(dataset_dir)
     gallery_source, registered_root = _resolve_registered_root(
-        located.registered_dir,
+        archive_registered_dir,
         gallery_choice,
         Path(local_registered_root),
     )
     dataset = load_grouped_self_dataset(
-        annotations_path=located.annotation_path,
-        test_root=located.dataset_root,
+        annotations_path=annotation_path,
+        test_root=dataset_root,
         registered_root=registered_root,
     )
     dataset = _with_registered_root(dataset, registered_root)
@@ -376,4 +333,54 @@ def run_external_eval_from_directory(
         confusion_pairs=report.metrics.confusion_pairs,
         missed_detections=missed_detections,
         false_positives=false_positives,
+    )
+
+
+def run_external_eval(
+    zip_path: str | Path,
+    gallery_choice: str,
+    *,
+    model: FaceModel,
+    threshold: float,
+    local_registered_root: str | Path,
+    local_gallery: Gallery | None = None,
+) -> ExternalEvalResult:
+    extracted_root: Path | None = None
+    try:
+        extracted = extract_dataset_archive(zip_path)
+        extracted_root = extracted.extracted_root
+        return _evaluate_located_dataset(
+            annotation_path=extracted.annotation_path,
+            dataset_root=extracted.dataset_root,
+            archive_registered_dir=extracted.registered_dir,
+            gallery_choice=gallery_choice,
+            model=model,
+            threshold=threshold,
+            local_registered_root=local_registered_root,
+            local_gallery=local_gallery,
+        )
+    finally:
+        if extracted_root is not None:
+            shutil.rmtree(extracted_root, ignore_errors=True)
+
+
+def run_external_eval_from_directory(
+    dataset_dir: str | Path,
+    gallery_choice: str,
+    *,
+    model: FaceModel,
+    threshold: float,
+    local_registered_root: str | Path,
+    local_gallery: Gallery | None = None,
+) -> ExternalEvalResult:
+    located = locate_external_dataset_directory(dataset_dir)
+    return _evaluate_located_dataset(
+        annotation_path=located.annotation_path,
+        dataset_root=located.dataset_root,
+        archive_registered_dir=located.registered_dir,
+        gallery_choice=gallery_choice,
+        model=model,
+        threshold=threshold,
+        local_registered_root=local_registered_root,
+        local_gallery=local_gallery,
     )
