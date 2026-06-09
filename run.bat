@@ -1,0 +1,1 @@
+python scripts/run_dev.py --model-path F:\Git_R\facepass\Insightface\models_cache\models\buffalo_l
