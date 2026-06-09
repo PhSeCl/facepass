@@ -1,0 +1,30 @@
+# FacePass 依赖清单（pip 适配）
+#
+# 本项目主推 uv（见 README「依赖」一节）。这个文件是给没有 uv 的同学用的，
+# 约束与 pyproject.toml 的 [project].dependencies 保持一致。
+#
+# 安装：
+#   python -m venv .venv
+#   .venv\Scripts\activate        # Windows PowerShell：.\.venv\Scripts\Activate.ps1
+#   pip install -r requirements.txt
+#
+# 注意：onnxruntime 固定为 CPU 版 1.22.1，保证 CPU-only 机器 / CI 可直接装。
+# 如需 GPU，请参考 README 单独把当前 venv 的 onnxruntime 换成 onnxruntime-gpu，
+# 不要改这里的默认约束。
+
+fastapi>=0.136.3
+gradio>=6.15.2
+insightface>=1.0.1
+matplotlib>=3.10.9
+numpy>=2.2.6
+onnxruntime==1.22.1
+opencv-python>=4.13.0.92
+pillow>=12.2.0
+pydantic>=2.13.4
+pytest>=9.0.3
+python-multipart>=0.0.29
+requests>=2.34.2
+scikit-learn>=1.7.2
+tomli>=2.4.1
+tomli-w>=1.2.0
+uvicorn>=0.48.0
