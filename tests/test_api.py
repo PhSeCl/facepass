@@ -312,7 +312,7 @@ def test_dataset_inspect_reports_registered_presence(monkeypatch) -> None:
     assert response.json() == {"has_registered": True}
 
 
-def test_dataset_inspect_accepts_directory_path(monkeypatch) -> None:
+def test_dataset_inspect_accepts_directory_path(monkeypatch, tmp_path) -> None:
     client = TestClient(app)
     captured: dict[str, object] = {}
 
@@ -322,14 +322,62 @@ def test_dataset_inspect_accepts_directory_path(monkeypatch) -> None:
 
     monkeypatch.setattr(api, "inspect_external_dataset_directory", fake_inspect_directory)
 
+    dataset_dir = str(tmp_path)
     response = client.post(
         "/dataset-eval/inspect",
-        data={"dataset_dir": r"F:\datasets\demo"},
+        data={"dataset_dir": dataset_dir},
     )
 
     assert response.status_code == 200
     assert response.json() == {"has_registered": False}
-    assert captured["path"] == r"F:\datasets\demo"
+    assert captured["path"] == str(tmp_path.resolve())
+
+
+def test_dataset_inspect_rejects_nonexistent_directory() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/dataset-eval/inspect",
+        data={"dataset_dir": "definitely/not/a/real/dataset-dir-xyz"},
+    )
+
+    assert response.status_code == 400
+    assert "message" in response.json()
+
+
+def test_dataset_inspect_accepts_path_with_parent_segments(monkeypatch, tmp_path) -> None:
+    # A path containing ".." that normalizes to a real directory must be
+    # accepted; the validator normalizes instead of substring-blocking "..".
+    client = TestClient(app)
+    captured: dict[str, object] = {}
+    target = tmp_path / "eval"
+    target.mkdir()
+
+    def fake_inspect_directory(path: str) -> bool:
+        captured["path"] = path
+        return False
+
+    monkeypatch.setattr(api, "inspect_external_dataset_directory", fake_inspect_directory)
+
+    messy_path = str(target / ".." / "eval")
+    response = client.post("/dataset-eval/inspect", data={"dataset_dir": messy_path})
+
+    assert response.status_code == 200
+    assert response.json() == {"has_registered": False}
+    assert captured["path"] == str(target.resolve())
+
+
+def test_recognize_rejects_oversize_upload(monkeypatch) -> None:
+    client = TestClient(app)
+    monkeypatch.setattr(api, "settings", SimpleNamespace(max_upload_bytes=8))
+
+    response = client.post(
+        "/recognize",
+        files={"file": ("big.png", b"x" * 64, "image/png")},
+    )
+
+    assert response.status_code == 413
+    assert "message" in response.json()
 
 
 def test_dataset_inspect_returns_readable_archive_error(monkeypatch) -> None:
@@ -408,7 +456,7 @@ def test_dataset_eval_returns_structured_report(monkeypatch) -> None:
     assert captured["kwargs"]["local_gallery"] is api._gallery
 
 
-def test_dataset_eval_accepts_directory_path(monkeypatch) -> None:
+def test_dataset_eval_accepts_directory_path(monkeypatch, tmp_path) -> None:
     client = TestClient(app)
     transparent_png = base64.b64encode(
         b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89"
@@ -450,16 +498,17 @@ def test_dataset_eval_accepts_directory_path(monkeypatch) -> None:
     monkeypatch.setattr(api, "get_recognizer", lambda: SimpleNamespace(model=object()))
     monkeypatch.setattr(api, "_gallery", api.Gallery())
 
+    dataset_dir = str(tmp_path)
     response = client.post(
         "/dataset-eval/run",
-        data={"gallery_choice": "local", "dataset_dir": r"F:\datasets\demo"},
+        data={"gallery_choice": "local", "dataset_dir": dataset_dir},
     )
 
     payload = response.json()
 
     assert response.status_code == 200
     assert payload["gallery_source"] == "local"
-    assert captured["args"][0] == r"F:\datasets\demo"
+    assert captured["args"][0] == str(tmp_path.resolve())
 
 
 def test_dataset_eval_returns_readable_layout_error(monkeypatch) -> None:

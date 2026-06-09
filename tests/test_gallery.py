@@ -1,3 +1,5 @@
+import pickle
+
 import numpy as np
 import pytest
 from PIL import Image
@@ -244,6 +246,45 @@ def test_build_from_cropped_dir_uses_encode_aligned_and_averages_identity_embedd
     assert similarity == pytest.approx(1.0)
     assert model.encode_calls == 3
     assert model.detect_calls == 0
+
+
+def test_load_flags_rebuild_for_legacy_pickle_cache(tmp_path) -> None:
+    # A pre-v3 cache was a raw pickle. load() must refuse to unpickle it and
+    # instead signal a rebuild, so a tampered cache can never execute code.
+    legacy_path = tmp_path / "gallery.npz"
+    with legacy_path.open("wb") as handle:
+        pickle.dump({"p01": [unit([1, 0, 0])]}, handle)
+
+    loaded = Gallery.load(legacy_path)
+
+    assert loaded.requires_rebuild is True
+    assert loaded.identities() == []
+
+
+def test_load_flags_rebuild_for_corrupt_cache(tmp_path) -> None:
+    corrupt_path = tmp_path / "gallery.npz"
+    corrupt_path.write_bytes(b"not a real npz payload")
+
+    loaded = Gallery.load(corrupt_path)
+
+    assert loaded.requires_rebuild is True
+
+
+def test_save_overwrites_existing_cache_atomically(tmp_path) -> None:
+    # A second save onto an existing cache must succeed (atomic replace), which
+    # also guards against leftover open file handles from a prior load.
+    path = tmp_path / "gallery.npz"
+    first = Gallery()
+    first.register("p01", [unit([1, 0, 0])])
+    first.save(path)
+
+    reloaded = Gallery.load(path)
+    reloaded.register("p02", [unit([0, 1, 0])])
+    reloaded.save(path)
+
+    final = Gallery.load(path)
+    assert [row["identity_id"] for row in final.identities()] == ["p01", "p02"]
+    assert not list(tmp_path.glob("*.tmp"))
 
 
 def test_register_supports_distinct_valid_image_count_metadata() -> None:

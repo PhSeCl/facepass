@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 import gradio as gr
 import requests
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 
 BACKEND_URL = os.getenv("FACEPASS_BACKEND_URL", "http://127.0.0.1:8000")
@@ -116,16 +116,42 @@ def _post_dataset_eval_directory(path: str, gallery_choice: str, backend_url: st
     )
 
 
+# Candidate fonts that ship CJK glyphs, in order of preference. The PIL default
+# font is bitmap-only and renders Chinese names as empty boxes, so a TrueType
+# font with CJK coverage is required for the labels to be legible.
+_CJK_FONT_CANDIDATES = (
+    "C:/Windows/Fonts/msyh.ttc",  # 微软雅黑 (Windows)
+    "C:/Windows/Fonts/simhei.ttf",  # 黑体 (Windows)
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",  # Linux (Noto)
+    "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",  # Linux (文泉驿)
+    "/System/Library/Fonts/PingFang.ttc",  # macOS
+)
+_LABEL_FONT_SIZE = 18
+
+
+def _load_label_font(size: int = _LABEL_FONT_SIZE) -> ImageFont.ImageFont:
+    for font_path in _CJK_FONT_CANDIDATES:
+        if Path(font_path).exists():
+            try:
+                return ImageFont.truetype(font_path, size)
+            except OSError:
+                continue
+    # No CJK-capable font available; the default keeps ASCII labels working
+    # rather than crashing, even though Chinese names will not render.
+    return ImageFont.load_default()
+
+
 def _draw_results(image_path: str, results: list[dict]) -> Image.Image:
     image = Image.open(image_path).convert("RGB")
     draw = ImageDraw.Draw(image)
+    font = _load_label_font()
     for result in results:
         x, y, w, h = result["bbox"]
         color = (220, 38, 38) if result["is_unknown"] else (22, 163, 74)
         label_name = result["identity_id"] if result["is_unknown"] else result.get("name") or result["identity_id"]
         label = f"{label_name} {result['similarity']:.2f}"
         draw.rectangle((x, y, x + w, y + h), outline=color, width=3)
-        draw.text((x, max(0, y - 14)), label, fill=color)
+        draw.text((x, max(0, y - _LABEL_FONT_SIZE - 2)), label, fill=color, font=font)
     return image
 
 
