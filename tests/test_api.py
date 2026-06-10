@@ -12,6 +12,7 @@ import pytest
 import src.backend.api as api
 from src.common.errors import ModelLoadError, ModelNotFoundError, ModelPathMissingError
 from src.backend.dataset_import import DatasetArchiveError, DatasetLayoutError
+from src.backend.dir_picker import DirectoryPickerUnavailable
 
 app = api.app
 
@@ -528,3 +529,37 @@ def test_dataset_eval_returns_readable_layout_error(monkeypatch) -> None:
 
     assert response.status_code == 400
     assert "未找到 images/" in response.json()["message"]
+
+
+def test_pick_directory_returns_selected_path(monkeypatch) -> None:
+    client = TestClient(app)
+    monkeypatch.setattr(api, "pick_directory_via_dialog", lambda: "F:/facepass/dataset")
+
+    response = client.post("/pick-directory")
+
+    assert response.status_code == 200
+    assert response.json() == {"path": "F:/facepass/dataset"}
+
+
+def test_pick_directory_returns_null_path_when_cancelled(monkeypatch) -> None:
+    client = TestClient(app)
+    monkeypatch.setattr(api, "pick_directory_via_dialog", lambda: None)
+
+    response = client.post("/pick-directory")
+
+    assert response.status_code == 200
+    assert response.json() == {"path": None}
+
+
+def test_pick_directory_reports_unavailable_dialog_as_400(monkeypatch) -> None:
+    client = TestClient(app)
+
+    def fake_pick() -> str | None:
+        raise DirectoryPickerUnavailable("没有图形界面")
+
+    monkeypatch.setattr(api, "pick_directory_via_dialog", fake_pick)
+
+    response = client.post("/pick-directory")
+
+    assert response.status_code == 400
+    assert response.json()["message"] == "没有图形界面"

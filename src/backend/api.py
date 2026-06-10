@@ -32,6 +32,7 @@ from src.eval.end2end_reporting import (
 from src.face_model import create_model
 
 from .config import settings
+from .dir_picker import DirectoryPickerUnavailable, pick_directory_via_dialog
 from .dataset_import import (
     DatasetArchiveError,
     DatasetLayoutError,
@@ -53,6 +54,7 @@ from .schemas import (
     EvalPlotsModel,
     IdentitiesResponse,
     IdentitySummary,
+    PickDirectoryResponse,
     RecognitionResultModel,
     RegisterResponse,
 )
@@ -499,6 +501,22 @@ async def register_batch(
         name=_id2name.get(identity_id, ""),
         saved=saved,
     )
+
+
+@app.post(
+    "/pick-directory",
+    response_model=PickDirectoryResponse,
+    responses={400: {"model": ErrorResponse}},
+)
+async def pick_directory() -> PickDirectoryResponse:
+    # Show the OS-native folder picker on the machine running the backend (same
+    # desktop as the browser for this local tool) and return the chosen absolute
+    # path so the frontend can fill it into the dataset-directory field.
+    try:
+        path = await run_in_threadpool(pick_directory_via_dialog)
+    except DirectoryPickerUnavailable as exc:
+        raise HTTPException(status_code=400, detail={"message": str(exc)}) from exc
+    return PickDirectoryResponse(path=path)
 
 
 @app.post(
