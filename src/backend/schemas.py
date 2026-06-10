@@ -51,6 +51,11 @@ class DatasetInspectResponse(BaseModel):
     has_registered: bool
 
 
+class PickDirectoryResponse(BaseModel):
+    # None when the user cancelled the native folder dialog.
+    path: str | None = None
+
+
 class EvalMetricsModel(BaseModel):
     strict_top1_accuracy: float
     matched_top1_accuracy: float
