@@ -5,19 +5,32 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FacePass</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #0a0a0a;
-      --surface: #141414;
-      --surface2: #1c1c1c;
-      --border: #2a2a2a;
-      --text: #e8e8e8;
-      --text2: #949494;
-      --accent: #fafafa;
-      --green: #22c55e;
-      --red: #ef4444;
-      --radius: 12px;
-      --radius-sm: 8px;
+      --celestine: #3869F4;
+      --celestine-dark: #2A56D4;
+      --celestine-light: #8DB0FF;
+      --celestine-bg: rgba(56, 105, 244, 0.07);
+      --celestine-glow: rgba(56, 105, 244, 0.12);
+      --valley: #2B313F;
+      --valley-light: #667085;
+      --valley-surface: #F0F1F4;
+      --valley-border: #DDE0E6;
+      --ivory: #FFFBF0;
+      --ivory-white: #FFFFFF;
+      --green: #22C55E;
+      --red: #EF4444;
+      --radius: 16px;
+      --radius-sm: 12px;
+      --radius-xs: 8px;
+      --shadow-xs: 0 1px 2px rgba(43, 49, 63, 0.04);
+      --shadow-sm: 0 1px 3px rgba(43, 49, 63, 0.06);
+      --shadow: 0 4px 20px rgba(43, 49, 63, 0.07);
+      --shadow-md: 0 8px 30px rgba(43, 49, 63, 0.10);
+      --shadow-lg: 0 12px 40px rgba(43, 49, 63, 0.12);
     }
 
     * {
@@ -27,156 +40,309 @@
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-      background: var(--bg);
-      color: var(--text);
+      font-family: 'Inter', 'SF Pro Display', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--ivory);
+      color: var(--valley);
       min-height: 100vh;
       -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      line-height: 1.6;
     }
 
-    .app {
-      max-width: 960px;
-      margin: 0 auto;
-      padding: 48px 24px 80px;
-      animation: fadeUp .5s ease;
+    body::before {
+      content: '';
+      position: fixed;
+      top: -30%;
+      left: -15%;
+      width: 75%;
+      height: 75%;
+      background: radial-gradient(ellipse at 30% 20%, var(--celestine-bg) 0%, transparent 65%);
+      pointer-events: none;
+      z-index: 0;
     }
 
-    /* Header */
-    .header {
+    body::after {
+      content: '';
+      position: fixed;
+      bottom: -25%;
+      right: -15%;
+      width: 70%;
+      height: 70%;
+      background: radial-gradient(ellipse at 70% 70%, rgba(56, 105, 244, 0.03) 0%, transparent 65%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Splash ── */
+    #splash {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
       display: flex;
+      flex-direction: column;
       align-items: center;
-      justify-content: space-between;
-      margin-bottom: 48px;
+      justify-content: center;
+      background: var(--ivory);
+      transition: opacity 0.5s ease, visibility 0.5s ease;
     }
 
-    .logo {
-      font-size: 20px;
+    #splash.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .splash-logo-img {
+      width: 160px;
+      height: 160px;
+      object-fit: contain;
+      margin-bottom: 32px;
+      animation: splashFloat 4s ease-in-out infinite;
+      filter: drop-shadow(0 8px 24px rgba(43, 49, 63, 0.10));
+    }
+
+    @keyframes splashFloat {
+
+      0%,
+      100% {
+        transform: translateY(0);
+      }
+
+      50% {
+        transform: translateY(-8px);
+      }
+    }
+
+    .splash-title {
+      font-size: 48px;
+      font-weight: 800;
+      letter-spacing: 6px;
+      color: var(--valley);
+      margin-bottom: 12px;
+      animation: fadeUp 0.7s ease 0.15s both;
+    }
+
+    .splash-subtitle {
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--valley-light);
+      margin-bottom: 44px;
+      letter-spacing: 1px;
+      animation: fadeUp 0.7s ease 0.3s both;
+    }
+
+    .splash-enter-btn {
+      padding: 15px 52px;
+      font-size: 15px;
       font-weight: 600;
-      letter-spacing: -0.5px;
-      background: linear-gradient(135deg, #fff 0%, #888 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      font-family: inherit;
+      letter-spacing: 0.5px;
+      background: var(--celestine);
+      color: #fff;
+      box-shadow: 0 4px 16px rgba(56, 105, 244, 0.3);
+      transition: all 0.28s ease;
+      animation: fadeUp 0.7s ease 0.45s both;
     }
 
-    .status {
+    .splash-enter-btn:hover {
+      background: var(--celestine-dark);
+      box-shadow: 0 6px 24px rgba(56, 105, 244, 0.4);
+      transform: translateY(-2px);
+    }
+
+    .splash-enter-btn:active {
+      transform: translateY(0) scale(0.98);
+    }
+
+    /* ── Main App Layout ── */
+    #main-app {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      display: none;
+    }
+
+    #main-app.visible {
+      display: flex;
+      animation: fadeIn 0.5s ease;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 260px;
+      flex-shrink: 0;
+      background: var(--ivory-white);
+      border-right: 1px solid var(--valley-border);
+      display: flex;
+      flex-direction: column;
+      padding: 32px 20px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      z-index: 50;
+    }
+
+    .sidebar-logo {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      color: var(--celestine);
+      margin-bottom: 8px;
+      padding: 0 12px;
+    }
+
+    .sidebar-status {
       display: flex;
       align-items: center;
       gap: 8px;
-      font-size: 13px;
-      color: var(--text2);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--valley-light);
+      padding: 0 12px;
+      margin-bottom: 32px;
     }
 
-    .status-dot {
-      width: 7px;
-      height: 7px;
+    .sidebar-status .status-dot {
+      width: 6px;
+      height: 6px;
       border-radius: 50%;
       background: var(--red);
-      transition: all .4s ease;
+      transition: all 0.4s ease;
     }
 
-    .status-dot.online {
+    .sidebar-status .status-dot.online {
       background: var(--green);
-      box-shadow: 0 0 8px rgba(34, 197, 94, .5);
+      box-shadow: 0 0 8px rgba(34, 197, 94, 0.4);
     }
 
-    /* Tabs */
-    .tabs {
+    .nav-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--valley-light);
+      opacity: 0.5;
+      padding: 0 12px;
+      margin: 24px 0 10px;
+    }
+
+    .nav-item {
       display: flex;
-      gap: 4px;
-      background: var(--surface);
-      border-radius: var(--radius);
-      padding: 4px;
-      margin-bottom: 40px;
-      animation: fadeUp .5s ease .1s both;
-    }
-
-    .tab {
-      flex: 1;
-      padding: 12px 20px;
-      border-radius: 9px;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      border-radius: 10px;
       font-size: 14px;
-      font-weight: 500;
-      text-align: center;
+      font-weight: 600;
+      color: var(--valley-light);
       cursor: pointer;
-      transition: all .25s ease;
-      color: var(--text2);
-      background: transparent;
+      transition: all 0.2s ease;
       border: none;
+      background: none;
       font-family: inherit;
-      position: relative;
-      overflow: hidden;
+      width: 100%;
+      text-align: left;
+      margin-bottom: 2px;
     }
 
-    .tab:hover {
-      color: var(--text);
+    .nav-item:hover {
+      background: var(--valley-surface);
+      color: var(--valley);
     }
 
-    .tab.active {
-      background: var(--surface2);
-      color: var(--text);
+    .nav-item.active {
+      background: var(--celestine-bg);
+      color: var(--celestine);
+      font-weight: 700;
     }
 
-    .tab.active::after {
-      content: '';
-      position: absolute;
-      bottom: 4px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 24px;
-      height: 2px;
-      border-radius: 1px;
-      background: var(--accent);
-      animation: tabIndicator .3s ease;
+    .nav-icon {
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
     }
 
-    /* Cards */
+    /* Main Content */
+    .main-content {
+      flex: 1;
+      min-width: 0;
+      padding: 40px 48px 80px;
+      max-width: 1100px;
+    }
+
+    .page-header {
+      margin-bottom: 36px;
+    }
+
+    .page-header h2 {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.8px;
+      color: var(--valley);
+    }
+
+    .page-header p {
+      font-size: 14px;
+      color: var(--valley-light);
+      margin-top: 4px;
+    }
+
+    /* ── Cards ── */
     .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
+      background: var(--ivory-white);
+      border: 1px solid var(--valley-border);
       border-radius: var(--radius);
       padding: 32px;
-      margin-bottom: 24px;
-      animation: fadeUp .4s ease .15s both;
-      transition: border-color .3s ease;
+      margin-bottom: 20px;
+      box-shadow: var(--shadow-xs);
+      animation: fadeUp 0.4s ease 0.1s both;
+      transition: box-shadow 0.3s ease, transform 0.3s ease;
     }
 
     .card:hover {
-      border-color: #333;
+      box-shadow: var(--shadow);
     }
 
     .card-title {
-      font-size: 15px;
-      font-weight: 600;
-      margin-bottom: 20px;
-      color: var(--text);
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 24px;
+      color: var(--valley);
+      letter-spacing: -0.3px;
     }
 
-    /* Upload Zone */
+    /* ── Upload Zone ── */
     .upload-zone {
-      border: 2px dashed var(--border);
+      border: 2px dashed var(--valley-border);
       border-radius: var(--radius);
-      padding: 48px 24px;
+      padding: 56px 24px;
       text-align: center;
       cursor: pointer;
-      transition: all .3s ease;
+      transition: all 0.3s ease;
       position: relative;
       overflow: hidden;
+      background: var(--valley-surface);
     }
 
     .upload-zone:hover {
-      border-color: #555;
-      background: var(--surface2);
+      border-color: var(--celestine-light);
+      background: rgba(56, 105, 244, 0.03);
     }
 
     .upload-zone.drag {
-      border-color: var(--accent);
-      background: var(--surface2);
+      border-color: var(--celestine);
+      background: var(--celestine-bg);
+      box-shadow: 0 0 0 4px var(--celestine-glow);
     }
 
     .upload-zone.has-image {
       padding: 0;
       border: none;
       cursor: default;
+      background: transparent;
     }
 
     .upload-zone.has-image:hover {
@@ -186,66 +352,70 @@
     .upload-icon {
       width: 48px;
       height: 48px;
-      margin: 0 auto 16px;
-      color: var(--text2);
-      opacity: .6;
-      transition: transform .3s ease;
+      margin: 0 auto 20px;
+      color: var(--celestine);
+      opacity: 0.4;
+      transition: transform 0.3s ease, opacity 0.3s ease;
     }
 
     .upload-zone:hover .upload-icon {
-      transform: translateY(-4px);
+      transform: translateY(-5px);
+      opacity: 0.7;
     }
 
     .upload-text {
-      font-size: 14px;
-      color: var(--text2);
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--valley-light);
     }
 
     .upload-hint {
-      font-size: 12px;
-      color: var(--text2);
-      opacity: .6;
+      font-size: 13px;
+      color: var(--valley-light);
+      opacity: 0.6;
       margin-top: 8px;
     }
 
     .preview-img {
       width: 100%;
-      max-height: 360px;
+      max-height: 400px;
       object-fit: contain;
       border-radius: var(--radius);
       display: block;
-      animation: fadeIn .4s ease;
+      animation: fadeIn 0.4s ease;
     }
 
     .preview-actions {
       position: absolute;
-      top: 12px;
-      right: 12px;
+      top: 16px;
+      right: 16px;
       display: flex;
       gap: 8px;
+      z-index: 5;
     }
 
     .preview-btn {
       width: 36px;
       height: 36px;
       border-radius: 50%;
-      background: rgba(0, 0, 0, .6);
+      background: rgba(43, 49, 63, 0.55);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
       border: none;
       cursor: pointer;
       color: #fff;
       display: flex;
       align-items: center;
       justify-content: center;
-      backdrop-filter: blur(8px);
-      transition: all .2s ease;
+      transition: all 0.2s ease;
     }
 
     .preview-btn:hover {
-      background: rgba(0, 0, 0, .8);
+      background: rgba(43, 49, 63, 0.8);
       transform: scale(1.1);
     }
 
-    /* Form */
+    /* ── Form ── */
     .form-group {
       margin-bottom: 20px;
     }
@@ -253,149 +423,159 @@
     .form-label {
       display: block;
       font-size: 13px;
-      font-weight: 500;
-      color: var(--text2);
+      font-weight: 600;
+      color: var(--valley-light);
       margin-bottom: 8px;
     }
 
     .form-input {
       width: 100%;
-      padding: 12px 16px;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      color: var(--text);
+      padding: 13px 16px;
       font-size: 15px;
       font-family: inherit;
+      font-weight: 500;
+      background: var(--valley-surface);
+      border: 1px solid var(--valley-border);
+      border-radius: var(--radius-xs);
+      color: var(--valley);
       outline: none;
-      transition: all .25s ease;
+      transition: all 0.25s ease;
     }
 
     .form-input:focus {
-      border-color: #555;
-      box-shadow: 0 0 0 3px rgba(255, 255, 255, .04);
+      border-color: var(--celestine);
+      box-shadow: 0 0 0 3px var(--celestine-glow);
+      background: var(--ivory-white);
     }
 
     .form-input::placeholder {
-      color: #555;
+      color: var(--valley-light);
+      opacity: 0.5;
     }
 
-    /* Buttons */
+    /* ── Buttons ── */
     .btn {
       display: inline-flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
       padding: 12px 28px;
-      border-radius: var(--radius-sm);
+      border-radius: var(--radius-xs);
       font-size: 14px;
-      font-weight: 500;
+      font-weight: 600;
       cursor: pointer;
-      transition: all .25s ease;
+      transition: all 0.22s ease;
       font-family: inherit;
       border: none;
       outline: none;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .btn::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: rgba(255, 255, 255, 0);
-      transition: background .3s ease;
-    }
-
-    .btn:active::after {
-      background: rgba(255, 255, 255, .1);
+      height: 44px;
     }
 
     .btn-primary {
-      background: var(--accent);
-      color: #0a0a0a;
+      background: var(--celestine);
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(56, 105, 244, 0.25);
     }
 
     .btn-primary:hover {
-      opacity: .85;
+      background: var(--celestine-dark);
+      box-shadow: 0 6px 20px rgba(56, 105, 244, 0.35);
       transform: translateY(-1px);
+    }
+
+    .btn-primary:active {
+      transform: translateY(0) scale(0.98);
     }
 
     .btn-primary:disabled {
-      opacity: .35;
+      opacity: 0.45;
       cursor: not-allowed;
       transform: none;
+      box-shadow: none;
     }
 
     .btn-secondary {
-      background: var(--surface2);
-      color: var(--text);
-      border: 1px solid var(--border);
+      background: var(--ivory-white);
+      color: var(--valley);
+      border: 1px solid var(--valley-border);
+      box-shadow: var(--shadow-xs);
     }
 
     .btn-secondary:hover {
-      background: #252525;
+      background: var(--valley-surface);
+      border-color: var(--valley-light);
       transform: translateY(-1px);
     }
 
-    /* Spinner */
-    .spinner {
-      width: 16px;
-      height: 16px;
-      border: 2px solid transparent;
-      border-top-color: currentColor;
-      border-radius: 50%;
-      animation: spin .6s linear infinite;
+    .btn-secondary:active {
+      transform: translateY(0) scale(0.98);
     }
 
-    /* Results */
+    /* ── Spinner ── */
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2.5px solid rgba(56, 105, 244, 0.18);
+      border-top-color: var(--celestine);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      display: inline-block;
+    }
+
+    .spinner-white {
+      border-color: rgba(255, 255, 255, 0.22);
+      border-top-color: #fff;
+    }
+
+    /* ── Results ── */
     .result-card {
-      background: var(--surface2);
-      border: 1px solid var(--border);
+      background: var(--ivory-white);
+      border: 1px solid var(--valley-border);
       border-radius: var(--radius-sm);
       padding: 20px;
       margin-bottom: 12px;
       display: flex;
       gap: 16px;
       align-items: flex-start;
-      animation: fadeUp .35s ease both;
-      transition: all .25s ease;
+      box-shadow: var(--shadow-xs);
+      animation: fadeUp 0.35s ease both;
+      transition: all 0.25s ease;
     }
 
     .result-card:hover {
-      border-color: #333;
-      transform: translateX(4px);
+      box-shadow: var(--shadow);
+      transform: translateY(-1px);
     }
 
     .result-card:nth-child(1) {
-      animation-delay: .05s;
+      animation-delay: 0.05s;
     }
 
     .result-card:nth-child(2) {
-      animation-delay: .1s;
+      animation-delay: 0.1s;
     }
 
     .result-card:nth-child(3) {
-      animation-delay: .15s;
+      animation-delay: 0.15s;
     }
 
     .result-card:nth-child(4) {
-      animation-delay: .2s;
+      animation-delay: 0.2s;
     }
 
     .result-card:nth-child(5) {
-      animation-delay: .25s;
+      animation-delay: 0.25s;
     }
 
     .result-avatar {
-      width: 52px;
-      height: 52px;
-      border-radius: 50%;
-      background: var(--surface);
+      width: 48px;
+      height: 48px;
+      border-radius: var(--radius-sm);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 20px;
+      font-size: 18px;
+      font-weight: 700;
       flex-shrink: 0;
     }
 
@@ -406,13 +586,15 @@
 
     .result-name {
       font-size: 16px;
-      font-weight: 600;
+      font-weight: 700;
+      letter-spacing: -0.3px;
     }
 
     .result-id {
       font-size: 12px;
-      color: var(--text2);
+      color: var(--valley-light);
       margin-top: 2px;
+      font-weight: 500;
     }
 
     .result-meta {
@@ -420,61 +602,57 @@
       gap: 16px;
       margin-top: 8px;
       font-size: 13px;
-      color: var(--text2);
-    }
-
-    .result-meta span {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-
-    .badge {
-      display: inline-block;
-      padding: 3px 10px;
-      border-radius: 99px;
-      font-size: 12px;
+      color: var(--valley-light);
       font-weight: 500;
     }
 
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 12px;
+      border-radius: 99px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
     .badge-match {
-      background: rgba(34, 197, 94, .15);
+      background: rgba(34, 197, 94, 0.1);
       color: var(--green);
     }
 
     .badge-unknown {
-      background: rgba(239, 68, 68, .15);
+      background: rgba(239, 68, 68, 0.1);
       color: var(--red);
     }
 
-    /* Toast */
+    /* ── Toast ── */
     .toast {
       position: fixed;
       top: 24px;
       left: 50%;
       transform: translateX(-50%);
-      padding: 12px 24px;
+      padding: 14px 28px;
       border-radius: var(--radius-sm);
       font-size: 14px;
-      font-weight: 500;
+      font-weight: 600;
       z-index: 1000;
-      backdrop-filter: blur(12px);
-      animation: toastIn .35s ease, toastOut .3s ease 2.7s forwards;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      box-shadow: var(--shadow-md);
+      animation: toastIn 0.35s ease, toastOut 0.3s ease 2.7s forwards;
     }
 
     .toast.success {
-      background: rgba(34, 197, 94, .2);
-      color: var(--green);
-      border: 1px solid rgba(34, 197, 94, .3);
+      background: rgba(34, 197, 94, 0.92);
+      color: #fff;
     }
 
     .toast.error {
-      background: rgba(239, 68, 68, .2);
-      color: var(--red);
-      border: 1px solid rgba(239, 68, 68, .3);
+      background: rgba(239, 68, 68, 0.92);
+      color: #fff;
     }
 
-    /* Image w/ boxes - use percentage positioning so boxes stay accurate at any size */
+    /* ── Image + boxes ── */
     .result-image-wrap {
       position: relative;
       display: block;
@@ -484,7 +662,8 @@
       border-radius: var(--radius);
       overflow: hidden;
       line-height: 0;
-      animation: fadeIn .5s ease;
+      box-shadow: var(--shadow);
+      animation: fadeIn 0.5s ease;
     }
 
     .result-image-wrap img {
@@ -496,7 +675,7 @@
     .face-box {
       position: absolute;
       border: 2px solid;
-      border-radius: 4px;
+      border-radius: 6px;
       pointer-events: none;
       animation: boxPulse 2s ease-in-out infinite;
     }
@@ -505,15 +684,15 @@
       position: absolute;
       font-size: 12px;
       font-weight: 600;
-      padding: 2px 8px;
-      border-radius: 4px;
+      padding: 3px 10px;
+      border-radius: 6px;
       white-space: nowrap;
       color: #fff;
       transform: translateY(-100%);
-      animation: labelFade .4s ease both;
+      animation: labelFade 0.4s ease both;
     }
 
-    /* Identity List */
+    /* ── Identity List ── */
     .identity-list {
       display: flex;
       flex-direction: column;
@@ -524,16 +703,25 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 14px 20px;
-      background: var(--surface2);
+      padding: 16px 20px;
+      background: var(--ivory-white);
+      border: 1px solid var(--valley-border);
       border-radius: var(--radius-sm);
-      transition: all .25s ease;
-      animation: fadeUp .3s ease both;
+      box-shadow: var(--shadow-xs);
+      transition: all 0.22s ease;
+      animation: fadeUp 0.3s ease both;
+      cursor: pointer;
+      user-select: none;
     }
 
     .identity-row:hover {
-      background: #222;
-      transform: translateX(4px);
+      box-shadow: var(--shadow);
+      transform: translateY(-1px);
+    }
+
+    .identity-row.expanded {
+      border-color: var(--celestine);
+      box-shadow: var(--shadow-md);
     }
 
     .identity-row-left {
@@ -543,52 +731,258 @@
     }
 
     .identity-avatar {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      background: var(--surface);
+      width: 44px;
+      height: 44px;
+      border-radius: var(--radius-xs);
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 16px;
-      font-weight: 600;
+      font-weight: 700;
+      flex-shrink: 0;
     }
 
     .identity-name {
       font-size: 14px;
-      font-weight: 500;
+      font-weight: 600;
+      letter-spacing: -0.2px;
     }
 
     .identity-meta {
       font-size: 12px;
-      color: var(--text2);
+      color: var(--valley-light);
+      font-weight: 500;
     }
 
-    /* Empty State */
+    .identity-detail {
+      background: var(--valley-surface);
+      border: 1px solid var(--valley-border);
+      border-top: none;
+      border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+      padding: 20px;
+      margin-top: -4px;
+      animation: fadeUp 0.3s ease;
+    }
+
+    .identity-detail-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--valley-border);
+    }
+
+    .identity-detail-avatar {
+      width: 64px;
+      height: 64px;
+      border-radius: var(--radius-sm);
+      background: var(--celestine-bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--celestine);
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+
+    .identity-detail-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .identity-detail-info h3 {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      margin-bottom: 4px;
+    }
+
+    .identity-detail-info p {
+      font-size: 13px;
+      color: var(--valley-light);
+    }
+
+    .thumb-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 10px;
+    }
+
+    .thumb-item {
+      border-radius: var(--radius-xs);
+      overflow: hidden;
+      border: 1px solid var(--valley-border);
+      aspect-ratio: 1;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .thumb-item:hover {
+      transform: scale(1.03);
+      box-shadow: var(--shadow);
+    }
+
+    .thumb-item img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .thumb-label {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(43, 49, 63, 0.65);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 4px 8px;
+      text-align: center;
+    }
+
+    /* ── Recognize identity card ── */
+    .recognize-identity-card {
+      background: var(--valley-surface);
+      border: 1px solid var(--valley-border);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      margin-top: 12px;
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      animation: fadeUp 0.35s ease;
+    }
+
+    .recognize-identity-card .identity-photo {
+      width: 80px;
+      height: 80px;
+      border-radius: var(--radius-xs);
+      object-fit: cover;
+      border: 1px solid var(--valley-border);
+      flex-shrink: 0;
+      box-shadow: var(--shadow-xs);
+      background: var(--valley-surface);
+    }
+
+    .recognize-identity-card .info h4 {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .recognize-identity-card .info p {
+      font-size: 13px;
+      color: var(--valley-light);
+      margin-bottom: 2px;
+    }
+
+    /* ── Empty / Skeleton ── */
     .empty {
       text-align: center;
-      padding: 48px 24px;
-      color: var(--text2);
-      animation: fadeIn .5s ease;
+      padding: 56px 24px;
+      color: var(--valley-light);
+      animation: fadeIn 0.5s ease;
     }
 
     .empty-icon {
-      font-size: 32px;
+      font-size: 36px;
       margin-bottom: 12px;
-      opacity: .4;
+      opacity: 0.25;
+      font-weight: 200;
     }
 
-    /* Loading skeleton */
     .skeleton {
-      background: linear-gradient(90deg, var(--surface2) 25%, #252525 50%, var(--surface2) 75%);
+      background: linear-gradient(90deg, var(--valley-surface) 25%, #DDE0E6 50%, var(--valley-surface) 75%);
       background-size: 200% 100%;
-      animation: shimmer 1.5s ease-in-out infinite;
+      animation: shimmer 1.6s ease-in-out infinite;
       border-radius: var(--radius-sm);
-      height: 60px;
+      height: 64px;
       margin-bottom: 12px;
     }
 
-    /* Keyframes */
+    /* ── Eval Metrics ── */
+    .eval-summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 16px;
+    }
+
+    .eval-metric {
+      background: var(--ivory-white);
+      border: 1px solid var(--valley-border);
+      border-radius: var(--radius-sm);
+      padding: 24px 20px;
+      text-align: center;
+      box-shadow: var(--shadow-xs);
+      transition: all 0.22s ease;
+    }
+
+    .eval-metric:hover {
+      box-shadow: var(--shadow);
+      transform: translateY(-2px);
+    }
+
+    .eval-metric-value {
+      font-size: 32px;
+      font-weight: 800;
+      color: var(--celestine);
+      letter-spacing: -1px;
+      line-height: 1.2;
+    }
+
+    .eval-metric-label {
+      font-size: 12px;
+      color: var(--valley-light);
+      margin-top: 6px;
+      font-weight: 600;
+    }
+
+    .eval-metric.green .eval-metric-value {
+      color: var(--green);
+    }
+
+    .eval-metric.red .eval-metric-value {
+      color: var(--red);
+    }
+
+    .plot-img {
+      width: 100%;
+      border-radius: var(--radius-sm);
+      margin-bottom: 16px;
+      border: 1px solid var(--valley-border);
+      box-shadow: var(--shadow-xs);
+    }
+
+    .gallery-photo {
+      width: 72px;
+      height: 72px;
+      border-radius: var(--radius-sm);
+      object-fit: cover;
+      border: 1px solid var(--valley-border);
+      flex-shrink: 0;
+      box-shadow: var(--shadow-xs);
+    }
+
+    .eval-action-inline {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .eval-status-text {
+      font-size: 13px;
+      color: var(--valley-light);
+      font-weight: 500;
+    }
+
+    /* ── Keyframes ── */
     @keyframes spin {
       to {
         transform: rotate(360deg);
@@ -620,7 +1014,7 @@
     @keyframes toastIn {
       from {
         opacity: 0;
-        transform: translateX(-50%) translateY(-12px);
+        transform: translateX(-50%) translateY(-14px);
       }
 
       to {
@@ -640,16 +1034,6 @@
       }
     }
 
-    @keyframes tabIndicator {
-      from {
-        width: 0;
-      }
-
-      to {
-        width: 24px;
-      }
-    }
-
     @keyframes boxPulse {
 
       0%,
@@ -658,7 +1042,7 @@
       }
 
       50% {
-        opacity: .7;
+        opacity: 0.6;
       }
     }
 
@@ -684,208 +1068,252 @@
       }
     }
 
-    /* Responsive */
-    @media (max-width: 640px) {
-      .app {
+    /* ── Responsive ── */
+    @media (max-width: 900px) {
+      #main-app {
+        flex-direction: column;
+      }
+
+      .sidebar {
+        width: 100%;
+        height: auto;
+        position: static;
+        flex-direction: row;
+        flex-wrap: wrap;
+        padding: 16px 20px;
+        gap: 4px;
+        border-right: none;
+        border-bottom: 1px solid var(--valley-border);
+      }
+
+      .sidebar-logo {
+        margin-bottom: 0;
+      }
+
+      .sidebar-status,
+      .nav-label {
+        display: none;
+      }
+
+      .nav-item {
+        width: auto;
+        padding: 8px 14px;
+        font-size: 13px;
+        margin-bottom: 0;
+      }
+
+      .main-content {
         padding: 24px 16px 60px;
       }
 
+      .page-header h2 {
+        font-size: 22px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .splash-title {
+        font-size: 32px;
+        letter-spacing: 3px;
+      }
+
+      .splash-logo-img {
+        width: 120px;
+        height: 120px;
+      }
+
+      .sidebar {
+        flex-wrap: wrap;
+      }
+
+      .nav-item {
+        flex: 1 1 45%;
+        justify-content: center;
+      }
+
+      .main-content {
+        padding: 20px 12px 48px;
+      }
+
       .card {
-        padding: 24px 20px;
+        padding: 20px 16px;
       }
 
-      .header {
-        margin-bottom: 32px;
+      .eval-summary {
+        grid-template-columns: 1fr;
       }
-
-      .face-label {
-        font-size: 10px;
-        padding: 1px 6px;
-      }
-    }
-
-    /* Eval Metrics */
-    .eval-summary {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 12px;
-    }
-
-    .eval-metric {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 16px;
-      text-align: center;
-    }
-
-    .eval-metric-value {
-      font-size: 28px;
-      font-weight: 700;
-      color: var(--accent);
-      letter-spacing: -0.5px;
-    }
-
-    .eval-metric-label {
-      font-size: 12px;
-      color: var(--text2);
-      margin-top: 4px;
-    }
-
-    .eval-metric.green .eval-metric-value {
-      color: var(--green);
-    }
-
-    .eval-metric.red .eval-metric-value {
-      color: var(--red);
-    }
-
-    .plot-img {
-      width: 100%;
-      border-radius: var(--radius-sm);
-      margin-bottom: 12px;
-      border: 1px solid var(--border);
-    }
-
-    /* Gallery photo in recognize results */
-    .gallery-photo {
-      width: 72px;
-      height: 72px;
-      border-radius: var(--radius-sm);
-      object-fit: cover;
-      border: 1px solid var(--border);
-      flex-shrink: 0;
     }
   </style>
 </head>
 
 <body>
 
-  <div class="app">
-    <!-- Header -->
-    <div class="header">
-      <div class="logo">FacePass</div>
-      <div class="status">
+  <!-- Splash Page -->
+  <div id="splash">
+    <img class="splash-logo-img" src="/logo" alt="FacePass Logo">
+    <div class="splash-title">FACEPASS</div>
+    <div class="splash-subtitle">智能人脸识别系统</div>
+    <button class="splash-enter-btn" onclick="enterSystem()">进入系统</button>
+  </div>
+
+  <!-- Main App -->
+  <div id="main-app">
+    <!-- Sidebar -->
+    <nav class="sidebar">
+      <div class="sidebar-logo">FACEPASS</div>
+      <div class="sidebar-status">
         <div class="status-dot" id="statusDot"></div>
         <span id="statusText">检测中...</span>
       </div>
-    </div>
+      <div class="nav-label">功能</div>
+      <button class="nav-item active" onclick="switchTab('recognize')">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+            d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.12A8.25 8.25 0 0112 12.75a8.25 8.25 0 017.5 7.37" />
+        </svg>
+        人脸识别
+      </button>
+      <button class="nav-item" onclick="switchTab('register')">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+            d="M19 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.24v.924a2.6 2.6 0 002.602 2.6h4.796" />
+        </svg>
+        录入人脸
+      </button>
+      <button class="nav-item" onclick="switchTab('gallery')">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+            d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
+        </svg>
+        身份库
+      </button>
+      <button class="nav-item" onclick="switchTab('eval')">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+            d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+        </svg>
+        批量评估
+      </button>
+    </nav>
 
-    <!-- Tabs -->
-    <div class="tabs">
-      <button class="tab active" onclick="switchTab('recognize')">识别</button>
-      <button class="tab" onclick="switchTab('register')">录入</button>
-      <button class="tab" onclick="switchTab('gallery')">底库</button>
-      <button class="tab" onclick="switchTab('eval')">评估</button>
-    </div>
-
-    <!-- ========== Recognize Tab ========== -->
-    <div id="tab-recognize">
-      <div class="card">
-        <div class="card-title">人脸识别</div>
-        <div class="upload-zone" id="recognizeDropZone" onclick="document.getElementById('recognizeInput').click()">
-          <svg class="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-              d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-          </svg>
-          <div class="upload-text">点击或拖拽上传图片</div>
-          <div class="upload-hint">JPG / PNG / WEBP</div>
+    <!-- Main Content Area -->
+    <div class="main-content">
+      <!-- ========== Recognize ========== -->
+      <div id="tab-recognize">
+        <div class="page-header">
+          <h2>人脸识别</h2>
+          <p>上传一张照片，自动检测并识别图中所有人脸</p>
         </div>
-        <input type="file" id="recognizeInput" accept="image/*" style="display:none"
-          onchange="handleRecognizeFile(this.files[0])">
-      </div>
-      <div id="recognizeResult" style="display:none">
         <div class="card">
-          <div class="card-title">检测结果</div>
-          <div id="recognizeImageWrap" style="text-align:center"></div>
-          <div id="recognizeList"></div>
+          <div class="card-title">上传图片</div>
+          <div class="upload-zone" id="recognizeDropZone" onclick="document.getElementById('recognizeInput').click()">
+            <svg class="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+            </svg>
+            <div class="upload-text">点击或拖拽上传图片</div>
+            <div class="upload-hint">JPG / PNG / WEBP</div>
+          </div>
+          <input type="file" id="recognizeInput" accept="image/*" style="display:none"
+            onchange="handleRecognizeFile(this.files[0])">
+        </div>
+        <div id="recognizeResult" style="display:none">
+          <div class="card">
+            <div class="card-title">检测结果</div>
+            <div id="recognizeImageWrap" style="text-align:center"></div>
+            <div id="recognizeList"></div>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- ========== Register Tab ========== -->
-    <div id="tab-register" style="display:none">
-      <div class="card">
-        <div class="card-title">录入人脸</div>
-        <div class="upload-zone" id="registerDropZone" onclick="document.getElementById('registerInput').click()">
-          <svg class="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-          <div class="upload-text">点击或拖拽上传人脸照片</div>
-          <div class="upload-hint">支持批量上传多张照片 · JPG / PNG</div>
+      <!-- ========== Register ========== -->
+      <div id="tab-register" style="display:none">
+        <div class="page-header">
+          <h2>录入人脸</h2>
+          <p>批量上传人脸照片并注册为新身份</p>
         </div>
-        <input type="file" id="registerInput" accept="image/*" multiple style="display:none"
-          onchange="handleRegisterFiles(this.files)">
+        <div class="card">
+          <div class="card-title">上传照片</div>
+          <div class="upload-zone" id="registerDropZone" onclick="document.getElementById('registerInput').click()">
+            <svg class="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            <div class="upload-text">点击或拖拽上传人脸照片</div>
+            <div class="upload-hint">支持批量上传多张照片 &middot; JPG / PNG</div>
+          </div>
+          <input type="file" id="registerInput" accept="image/*" multiple style="display:none"
+            onchange="handleRegisterFiles(this.files)">
+        </div>
+        <div class="card" id="registerFormCard" style="display:none">
+          <div class="card-title">身份信息 <span id="regFileCount"
+              style="font-weight:500;color:var(--valley-light);font-size:13px"></span></div>
+          <div class="form-group"><label class="form-label">身份 ID</label><input class="form-input" id="regIdentityId"
+              placeholder="例如：p21（必填）"></div>
+          <div class="form-group"><label class="form-label">姓名</label><input class="form-input" id="regName"
+              placeholder="例如：张三"></div>
+          <button class="btn btn-primary" id="regSubmitBtn" onclick="submitRegister()">录入底库</button>
+        </div>
+        <div id="registerResult" style="display:none"></div>
       </div>
-      <div class="card" id="registerFormCard" style="display:none">
-        <div class="card-title">身份信息 <span id="regFileCount"
-            style="font-weight:400;color:var(--text2);font-size:13px"></span></div>
-        <div class="form-group">
-          <label class="form-label">身份 ID</label>
-          <input class="form-input" id="regIdentityId" placeholder="例如：p21（必填）">
-        </div>
-        <div class="form-group">
-          <label class="form-label">姓名</label>
-          <input class="form-input" id="regName" placeholder="例如：张三">
-        </div>
-        <button class="btn btn-primary" id="regSubmitBtn" onclick="submitRegister()">录入底库</button>
-      </div>
-      <div id="registerResult" style="display:none"></div>
-    </div>
 
-    <!-- ========== Gallery Tab ========== -->
-    <div id="tab-gallery" style="display:none">
-      <div class="card">
-        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
-          已录入身份
-          <button class="btn btn-secondary" style="padding:8px 16px;font-size:13px"
+      <!-- ========== Gallery ========== -->
+      <div id="tab-gallery" style="display:none">
+        <div class="page-header" style="display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <h2>身份库</h2>
+            <p>查看已录入的全部身份及注册照片</p>
+          </div>
+          <button class="btn btn-secondary" style="padding:10px 20px;font-size:13px;height:38px"
             onclick="loadIdentities()">刷新</button>
         </div>
-        <div class="identity-list" id="identityList">
-          <div class="empty">
-            <div class="empty-icon">---</div>
-            <div>加载中...</div>
+        <div class="card">
+          <div class="identity-list" id="identityList">
+            <div class="empty">
+              <div class="empty-icon">&mdash;</div>
+              <div>加载中...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========== Eval ========== -->
+      <div id="tab-eval" style="display:none">
+        <div class="page-header">
+          <h2>批量评估</h2>
+          <p>上传测试数据集 ZIP，批量评估模型准确率与召回率</p>
+        </div>
+        <div class="card">
+          <div class="card-title">上传数据集</div>
+          <div class="upload-zone" id="evalDropZone" onclick="document.getElementById('evalInput').click()">
+            <svg class="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+            </svg>
+            <div class="upload-text">点击或拖拽上传测试数据集 ZIP</div>
+            <div class="upload-hint">ZIP 格式 &middot; 含 registered/ 和 test/ 目录及标注文件</div>
+          </div>
+          <input type="file" id="evalInput" accept=".zip" style="display:none" onchange="handleEvalFile(this.files[0])">
+        </div>
+        <div class="card" id="evalInfoCard" style="display:none">
+          <div class="card-title">数据集信息</div>
+          <div id="evalInfoList"></div>
+        </div>
+        <div class="card" style="display:none" id="evalActionCard">
+          <div class="eval-action-inline"><button class="btn btn-primary" id="evalRunBtn"
+              onclick="runEval()">开始评估</button><span class="eval-status-text" id="evalStatus"></span></div>
+        </div>
+        <div id="evalResult" style="display:none">
+          <div class="card">
+            <div class="card-title">评估结果</div>
+            <div id="evalSummary" class="eval-summary"></div>
+          </div>
+          <div class="card" id="evalPlotsCard" style="display:none">
+            <div class="card-title">可视化图表</div>
+            <div id="evalPlots"></div>
           </div>
         </div>
       </div>
     </div>
-
-    <!-- ========== Eval Tab ========== -->
-    <div id="tab-eval" style="display:none">
-      <div class="card">
-        <div class="card-title">批量评估</div>
-        <div class="upload-zone" id="evalDropZone" onclick="document.getElementById('evalInput').click()">
-          <svg class="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-              d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-          </svg>
-          <div class="upload-text">点击或拖拽上传测试数据集 ZIP</div>
-          <div class="upload-hint">ZIP 格式 · 包含 registered/ 和 test/ 目录及标注文件</div>
-        </div>
-        <input type="file" id="evalInput" accept=".zip" style="display:none" onchange="handleEvalFile(this.files[0])">
-      </div>
-      <div class="card" id="evalInfoCard" style="display:none">
-        <div class="card-title">数据集信息</div>
-        <div id="evalInfoList"></div>
-      </div>
-      <div class="card" style="display:none" id="evalActionCard">
-        <button class="btn btn-primary" id="evalRunBtn" onclick="runEval()">
-          开始评估
-        </button>
-        <span style="margin-left:12px;font-size:13px;color:var(--text2)" id="evalStatus"></span>
-      </div>
-      <div id="evalResult" style="display:none">
-        <div class="card">
-          <div class="card-title">评估结果</div>
-          <div id="evalSummary" class="eval-summary"></div>
-        </div>
-        <div class="card" id="evalPlotsCard" style="display:none">
-          <div class="card-title">可视化图表</div>
-          <div id="evalPlots"></div>
-        </div>
-      </div>
-    </div>
-
   </div>
 
   <script>
@@ -894,51 +1322,48 @@
     let registerFiles = [];
     let evalFile = null;
 
-    document.addEventListener('DOMContentLoaded', () => {
+    function enterSystem() {
+      document.getElementById('splash').classList.add('hidden');
+      const mainApp = document.getElementById('main-app');
+      mainApp.classList.add('visible');
       checkHealth();
       setupDragDrop('recognizeDropZone', 'recognizeInput', (files) => handleRecognizeFile(files[0]));
       setupDragDrop('registerDropZone', 'registerInput', (files) => handleRegisterFiles(files));
       setupDragDrop('evalDropZone', 'evalInput', (files) => handleEvalFile(files[0]));
-    });
+    }
 
     function setupDragDrop(zoneId, inputId, handler) {
       const zone = document.getElementById(zoneId);
       zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag'); });
       zone.addEventListener('dragleave', () => zone.classList.remove('drag'));
       zone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        zone.classList.remove('drag');
-        const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+        e.preventDefault(); zone.classList.remove('drag');
+        const files = Array.from(e.dataTransfer.files).filter(f => {
+          if (zoneId === 'evalDropZone') return f.name.toLowerCase().endsWith('.zip');
+          return f.type.startsWith('image/');
+        });
         if (files.length > 0) handler(files);
       });
     }
 
     async function checkHealth() {
-      try {
-        const r = await fetch(API + '/health');
-        setStatus(r.ok);
-      } catch { setStatus(false); }
+      try { const r = await fetch(API + '/health'); setStatus(r.ok); } catch { setStatus(false); }
     }
 
     function setStatus(online) {
-      const dot = document.getElementById('statusDot');
-      const text = document.getElementById('statusText');
-      if (online) { dot.classList.add('online'); text.textContent = '已连接'; }
-      else { dot.classList.remove('online'); text.textContent = '未连接'; }
+      document.querySelectorAll('.status-dot').forEach(d => {
+        online ? d.classList.add('online') : d.classList.remove('online');
+      });
+      const t = document.getElementById('statusText');
+      if (t) t.textContent = online ? '已连接' : '未连接';
     }
 
     function switchTab(tab) {
-      document.querySelectorAll('.tab').forEach((t, i) => {
-        t.classList.toggle('active', ['recognize', 'register', 'gallery', 'eval'][i] === tab);
+      document.querySelectorAll('.nav-item').forEach((el, i) => {
+        el.classList.toggle('active', ['recognize', 'register', 'gallery', 'eval'][i] === tab);
       });
-      const panels = {
-        recognize: document.getElementById('tab-recognize'),
-        register: document.getElementById('tab-register'),
-        gallery: document.getElementById('tab-gallery'),
-        eval: document.getElementById('tab-eval')
-      };
-      Object.entries(panels).forEach(([key, el]) => {
-        el.style.display = key === tab ? '' : 'none';
+      ['recognize', 'register', 'gallery', 'eval'].forEach(k => {
+        document.getElementById('tab-' + k).style.display = k === tab ? '' : 'none';
       });
       if (tab === 'gallery') loadIdentities();
     }
@@ -974,92 +1399,41 @@
     async function runRecognize() {
       if (!recognizeFile) return;
       setStatus(true);
-      const form = new FormData();
-      form.append('file', recognizeFile);
-
+      const form = new FormData(); form.append('file', recognizeFile);
       const resultDiv = document.getElementById('recognizeResult');
       const wrap = document.getElementById('recognizeImageWrap');
       const list = document.getElementById('recognizeList');
       resultDiv.style.display = '';
-
-      // Loading state
-      wrap.innerHTML = '<div style="text-align:center;padding:24px"><span class="spinner" style="width:28px;height:28px;border-width:3px;display:inline-block;color:var(--text2)"></span></div>';
-      list.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
-
+      wrap.innerHTML = '<div style="text-align:center;padding:32px"><span class="spinner" style="width:32px;height:32px;border-width:3px;"></span></div>';
+      list.innerHTML = '<div class="skeleton"></div><div class="skeleton" style="width:75%"></div>';
       try {
         const r = await fetch(API + '/recognize', { method: 'POST', body: form });
-        if (!r.ok) {
-          const err = await r.json().catch(() => ({ message: '请求失败' }));
-          toast(err.message || '识别失败', 'error');
-          wrap.innerHTML = '';
-          list.innerHTML = '';
-          return;
-        }
+        if (!r.ok) { const err = await r.json().catch(() => ({ message: '请求失败' })); toast(err.message || '识别失败', 'error'); wrap.innerHTML = ''; list.innerHTML = ''; return; }
         const results = await r.json();
+        if (!results || results.length === 0) { wrap.innerHTML = `<div style="text-align:center;padding:32px;color:var(--valley-light);font-size:15px">未检测到人脸</div>`; list.innerHTML = ''; return; }
 
-        if (!results || results.length === 0) {
-          wrap.innerHTML = `<div style="text-align:center;padding:24px;color:var(--text2)">未检测到人脸</div>`;
-          list.innerHTML = '';
-          return;
-        }
-
-        // Draw image with percentage-based boxes — always accurate regardless of display size
         const imgUrl = URL.createObjectURL(recognizeFile);
         const img = new Image();
         img.onload = () => {
-          const nW = img.naturalWidth;
-          const nH = img.naturalHeight;
-
-          let html = `<div class="result-image-wrap">`;
-          html += `<img src="${imgUrl}" alt="result">`;
-
+          const nW = img.naturalWidth, nH = img.naturalHeight;
+          let html = `<div class="result-image-wrap"><img src="${imgUrl}" alt="result">`;
           results.forEach((res, i) => {
             const [bx, by, bw, bh] = res.bbox;
             const color = res.is_unknown ? 'var(--red)' : 'var(--green)';
             const label = res.is_unknown ? '未知' : (res.name || res.identity_id);
-            const left = (bx / nW * 100);
-            const top = (by / nH * 100);
-            const width = (bw / nW * 100);
-            const height = (bh / nH * 100);
-
-            html += `<div class="face-box" style="left:${left}%;top:${top}%;width:${width}%;height:${height}%;border-color:${color};animation-delay:${i * 0.3}s"></div>`;
-            html += `<div class="face-label" style="left:${left}%;top:${top}%;background:${color};animation-delay:${i * 0.3}s">${label} ${res.similarity.toFixed(2)}</div>`;
+            html += `<div class="face-box" style="left:${bx / nW * 100}%;top:${by / nH * 100}%;width:${bw / nW * 100}%;height:${bh / nH * 100}%;border-color:${color};animation-delay:${i * 0.3}s"></div>`;
+            html += `<div class="face-label" style="left:${bx / nW * 100}%;top:${by / nH * 100}%;background:${color};animation-delay:${i * 0.3}s">${label} ${res.similarity.toFixed(2)}</div>`;
           });
-
-          html += '</div>';
-          wrap.innerHTML = html;
+          html += '</div>'; wrap.innerHTML = html;
         };
         img.src = imgUrl;
 
-        // Results list
         list.innerHTML = results.map((res, i) => {
-          const galleryImg = !res.is_unknown && res.identity_id !== 'unknown'
-            ? `<img class="gallery-photo" src="${API}/identity/${encodeURIComponent(res.identity_id)}/image" alt="${res.name || res.identity_id}" onerror="this.style.display='none'" loading="lazy">`
-            : '';
-          return `
-      <div class="result-card" style="animation-delay:${i * 0.08}s">
-        ${galleryImg}
-        <div class="result-avatar" style="background:${res.is_unknown ? 'rgba(239,68,68,.1)' : 'rgba(34,197,94,.1)'};color:${res.is_unknown ? 'var(--red)' : 'var(--green)'}">${res.is_unknown ? '?' : (res.name || res.identity_id).charAt(0)}</div>
-        <div class="result-info">
-          <div class="result-name">
-            ${res.is_unknown ? '未知身份' : (res.name || res.identity_id)}
-            <span class="badge ${res.is_unknown ? 'badge-unknown' : 'badge-match'}">${res.is_unknown ? '未知' : '已匹配'}</span>
-          </div>
-          <div class="result-id">ID: ${res.identity_id}</div>
-          <div class="result-meta">
-            <span>${(res.similarity * 100).toFixed(1)}%</span>
-            <span>[${res.bbox[0]}, ${res.bbox[1]}, ${res.bbox[2]}x${res.bbox[3]}]</span>
-          </div>
-        </div>
-      </div>
-    `}).join('');
-
-      } catch (e) {
-        toast('网络错误，请检查服务是否运行', 'error');
-        setStatus(false);
-        wrap.innerHTML = '';
-        list.innerHTML = '';
-      }
+          const galleryImg = !res.is_unknown && res.identity_id !== 'unknown' ? `<img class="gallery-photo" src="${API}/identity/${encodeURIComponent(res.identity_id)}/image" alt="${res.name || res.identity_id}" onerror="this.style.display='none'" loading="lazy">` : '';
+          const identityCard = !res.is_unknown && res.identity_id !== 'unknown' ? `<div class="recognize-identity-card"><img class="identity-photo" src="${API}/identity/${encodeURIComponent(res.identity_id)}/image" alt="${res.name || res.identity_id}" onerror="this.parentElement.remove()" loading="lazy"><div class="info"><h4>${res.name || res.identity_id}</h4><p>ID: ${res.identity_id}</p><p>相似度: ${(res.similarity * 100).toFixed(1)}%</p><p style="margin-top:4px;font-size:12px;color:var(--celestine);font-weight:600"><svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="vertical-align:-1px"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg> 匹配成功</p></div></div>` : '';
+          return `<div class="result-card" style="animation-delay:${i * 0.08}s">${galleryImg}<div class="result-avatar" style="background:${res.is_unknown ? 'rgba(239,68,68,.08)' : 'rgba(34,197,94,.08)'};color:${res.is_unknown ? 'var(--red)' : 'var(--green)'}">${res.is_unknown ? '?' : (res.name || res.identity_id).charAt(0)}</div><div class="result-info"><div class="result-name">${res.is_unknown ? '未知身份' : (res.name || res.identity_id)}<span class="badge ${res.is_unknown ? 'badge-unknown' : 'badge-match'}">${res.is_unknown ? '未知' : '已匹配'}</span></div><div class="result-id">ID: ${res.identity_id}</div><div class="result-meta"><span>${(res.similarity * 100).toFixed(1)}%</span><span>[${res.bbox[0]}, ${res.bbox[1]}, ${res.bbox[2]} &times; ${res.bbox[3]}]</span></div>${identityCard}</div></div>`;
+        }).join('');
+      } catch (e) { toast('网络错误，请检查服务是否运行', 'error'); setStatus(false); wrap.innerHTML = ''; list.innerHTML = ''; }
     }
 
     // --- Register ---
@@ -1067,16 +1441,13 @@
       if (!files || files.length === 0) return;
       registerFiles = Array.from(files);
       const count = registerFiles.length;
-
       const zone = document.getElementById('registerDropZone');
       zone.classList.add('has-image');
-
       if (count === 1) {
         zone.innerHTML = `<img class="preview-img" src="${URL.createObjectURL(registerFiles[0])}" alt="preview"><div class="preview-actions"><button class="preview-btn" onclick="event.stopPropagation();clearRegister()"><svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button></div>`;
       } else {
-        zone.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;padding:16px;max-height:300px;overflow-y:auto">${registerFiles.slice(0, 6).map(f => `<img src="${URL.createObjectURL(f)}" style="width:80px;height:80px;object-fit:cover;border-radius:8px">`).join('')}${count > 6 ? `<div style="width:80px;height:80px;border-radius:8px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--text2)">+${count - 6}</div>` : ''}</div><div class="preview-actions"><button class="preview-btn" onclick="event.stopPropagation();clearRegister()"><svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button></div>`;
+        zone.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;padding:16px;max-height:320px;overflow-y:auto">${registerFiles.slice(0, 6).map(f => `<img src="${URL.createObjectURL(f)}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid var(--valley-border)">`).join('')}${count > 6 ? `<div style="width:80px;height:80px;border-radius:8px;background:var(--valley-surface);border:1px solid var(--valley-border);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:var(--valley-light)">+${count - 6}</div>` : ''}</div><div class="preview-actions"><button class="preview-btn" onclick="event.stopPropagation();clearRegister()"><svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button></div>`;
       }
-
       zone.onclick = null;
       document.getElementById('registerFormCard').style.display = '';
       document.getElementById('regFileCount').textContent = `(${count} 张照片)`;
@@ -1087,7 +1458,7 @@
       registerFiles = [];
       const zone = document.getElementById('registerDropZone');
       zone.classList.remove('has-image');
-      zone.innerHTML = `<svg class="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4.5v15m7.5-7.5h-12"/></svg><div class="upload-text">点击或拖拽上传人脸照片</div><div class="upload-hint">支持批量上传多张照片 · JPG / PNG</div>`;
+      zone.innerHTML = `<svg class="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4.5v15m7.5-7.5h-12"/></svg><div class="upload-text">点击或拖拽上传人脸照片</div><div class="upload-hint">支持批量上传多张照片 &middot; JPG / PNG</div>`;
       zone.onclick = () => document.getElementById('registerInput').click();
       document.getElementById('registerFormCard').style.display = 'none';
       document.getElementById('registerResult').style.display = 'none';
@@ -1097,85 +1468,90 @@
 
     async function submitRegister() {
       if (registerFiles.length === 0) { toast('请先上传照片', 'error'); return; }
-
       const identityId = document.getElementById('regIdentityId').value.trim();
       const name = document.getElementById('regName').value.trim();
       if (!identityId) { toast('请输入身份 ID', 'error'); return; }
-
       const btn = document.getElementById('regSubmitBtn');
       btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span> 录入中...';
-
+      btn.innerHTML = '<span class="spinner spinner-white"></span> 录入中...';
       try {
         const form = new FormData();
         registerFiles.forEach(f => form.append('files', f));
         form.append('identity_id', identityId);
         form.append('name', name);
-
         const r = await fetch(API + '/register/batch', { method: 'POST', body: form });
         const data = await r.json();
         if (!r.ok) { toast(data.message || '录入失败', 'error'); btn.disabled = false; btn.innerHTML = '录入底库'; return; }
-
         toast(`录入成功: ${data.saved || 1} 张`, 'success');
-
         const resultDiv = document.getElementById('registerResult');
         resultDiv.style.display = '';
-        resultDiv.innerHTML = `<div class="card"><div class="card-title">录入完成</div><div class="result-card"><div class="result-avatar" style="background:rgba(34,197,94,.1);color:var(--green)">${(data.name || data.identity_id).charAt(0)}</div><div class="result-info"><div class="result-name">${data.name || data.identity_id}</div><div class="result-id">成功: ${data.saved || 1} 张 · ID: ${data.identity_id}</div></div></div><button class="btn btn-secondary" style="margin-top:12px" onclick="clearRegister()">继续录入</button></div>`;
-
+        resultDiv.innerHTML = `<div class="card"><div class="card-title">录入完成</div><div class="result-card"><div class="result-avatar" style="background:rgba(34,197,94,.08);color:var(--green)">${(data.name || data.identity_id).charAt(0)}</div><div class="result-info"><div class="result-name">${data.name || data.identity_id}</div><div class="result-id">成功: ${data.saved || 1} 张 &middot; ID: ${data.identity_id}</div></div></div><button class="btn btn-secondary" style="margin-top:12px" onclick="clearRegister()">继续录入</button></div>`;
         clearRegister();
-      } catch (e) {
-        toast('网络错误，请检查服务是否运行', 'error');
-        setStatus(false);
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = '录入底库';
-      }
+      } catch (e) { toast('网络错误，请检查服务是否运行', 'error'); setStatus(false); } finally { btn.disabled = false; btn.innerHTML = '录入底库'; }
     }
 
     // --- Identities ---
+    let expandedIdentityId = null;
+
     async function loadIdentities() {
       const list = document.getElementById('identityList');
       try {
         const r = await fetch(API + '/identities');
         if (!r.ok) throw new Error();
         const data = await r.json();
-
-        if (!data.identities || data.identities.length === 0) {
-          list.innerHTML = '<div class="empty"><div class="empty-icon">---</div><div>暂无录入身份</div></div>';
-          return;
-        }
-
+        if (!data.identities || data.identities.length === 0) { list.innerHTML = '<div class="empty"><div class="empty-icon">&mdash;</div><div>暂无录入身份</div></div>'; expandedIdentityId = null; return; }
         list.innerHTML = data.identities.map((item, i) => `
-      <div class="identity-row" style="animation-delay:${i * 0.04}s">
-        <div class="identity-row-left">
-          <div class="identity-avatar">${(item.name || item.identity_id).charAt(0)}</div>
-          <div>
-            <div class="identity-name">${item.name || item.identity_id}</div>
-            <div class="identity-meta">ID: ${item.identity_id}</div>
+      <div id="identity-group-${item.identity_id}">
+        <div class="identity-row" style="animation-delay:${i * 0.04}s" onclick="toggleIdentityDetail('${item.identity_id}')">
+          <div class="identity-row-left">
+            <div class="identity-avatar" style="background:var(--celestine-bg);color:var(--celestine)">${(item.name || item.identity_id).charAt(0)}</div>
+            <div><div class="identity-name">${item.name || item.identity_id}</div><div class="identity-meta">ID: ${item.identity_id}</div></div>
           </div>
+          <div class="identity-meta">${item.valid_image_count || item.prototype_count || 0} 张注册图</div>
         </div>
-        <div class="identity-meta">${item.valid_image_count || item.prototype_count || 0} 张注册图</div>
-      </div>
-    `).join('');
+        <div class="identity-detail" id="identity-detail-${item.identity_id}" style="display:none"></div>
+      </div>`).join('');
+      } catch { list.innerHTML = '<div class="empty"><div class="empty-icon">&mdash;</div><div>无法加载底库，请检查服务</div></div>'; }
+    }
 
-      } catch {
-        list.innerHTML = '<div class="empty"><div class="empty-icon">---</div><div>无法加载底库，请检查服务</div></div>';
+    async function toggleIdentityDetail(identityId) {
+      const detailEl = document.getElementById('identity-detail-' + identityId);
+      const rowEl = document.getElementById('identity-group-' + identityId)?.querySelector('.identity-row');
+      if (expandedIdentityId && expandedIdentityId !== identityId) {
+        const prevDetail = document.getElementById('identity-detail-' + expandedIdentityId);
+        const prevRow = document.getElementById('identity-group-' + expandedIdentityId)?.querySelector('.identity-row');
+        if (prevDetail) prevDetail.style.display = 'none';
+        if (prevRow) prevRow.classList.remove('expanded');
       }
+      if (detailEl.style.display === 'none' || !detailEl.style.display) {
+        if (detailEl.innerHTML === '') {
+          detailEl.innerHTML = '<div style="text-align:center;padding:24px"><span class="spinner"></span></div>';
+          detailEl.style.display = '';
+          try {
+            const r = await fetch(API + '/identity/' + encodeURIComponent(identityId) + '/detail');
+            if (!r.ok) throw new Error();
+            const detail = await r.json();
+            detailEl.innerHTML = renderIdentityDetail(detail);
+          } catch { detailEl.innerHTML = '<div style="text-align:center;padding:16px;color:var(--valley-light)">加载失败</div>'; }
+        } else { detailEl.style.display = ''; }
+        if (rowEl) rowEl.classList.add('expanded');
+        expandedIdentityId = identityId;
+      } else { detailEl.style.display = 'none'; if (rowEl) rowEl.classList.remove('expanded'); expandedIdentityId = null; }
+    }
+
+    function renderIdentityDetail(detail) {
+      const photoUrl = API + '/identity/' + encodeURIComponent(detail.identity_id) + '/image';
+      return `<div class="identity-detail-header"><div class="identity-detail-avatar"><img src="${photoUrl}" alt="${detail.name || detail.identity_id}" onerror="this.parentElement.textContent='${(detail.name || detail.identity_id).charAt(0)}';this.remove()"></div><div class="identity-detail-info"><h3>${detail.name || detail.identity_id}</h3><p>ID: ${detail.identity_id} &middot; ${detail.valid_image_count || 0} 张有效图 &middot; ${detail.prototype_count || 0} 个原型</p></div></div><div class="thumb-grid">${detail.images.map(img => `<div class="thumb-item"><img src="${API}/identity/${encodeURIComponent(detail.identity_id)}/image/${encodeURIComponent(img)}" alt="${img}" loading="lazy" onerror="this.style.opacity='0.3'"><div class="thumb-label">${img}</div></div>`).join('')}</div>`;
     }
 
     // --- Eval ---
     function handleEvalFile(file) {
-      if (!file || !file.name.toLowerCase().endsWith('.zip')) {
-        toast('请上传 ZIP 文件', 'error');
-        return;
-      }
+      if (!file || !file.name.toLowerCase().endsWith('.zip')) { toast('请上传 ZIP 文件', 'error'); return; }
       evalFile = file;
       const zone = document.getElementById('evalDropZone');
       zone.classList.add('has-image');
-      zone.innerHTML = `<div style="padding:24px;text-align:center"><div style="font-size:14px;color:var(--text)">${file.name}</div><div style="font-size:12px;color:var(--text2);margin-top:4px">${(file.size / 1024 / 1024).toFixed(1)} MB</div><div class="preview-actions"><button class="preview-btn" onclick="event.stopPropagation();clearEval()"><svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button></div></div>`;
+      zone.innerHTML = `<div style="padding:32px;text-align:center"><div style="font-size:15px;font-weight:600;color:var(--valley)">${file.name}</div><div style="font-size:13px;color:var(--valley-light);margin-top:6px">${(file.size / 1024 / 1024).toFixed(1)} MB</div><div class="preview-actions"><button class="preview-btn" onclick="event.stopPropagation();clearEval()"><svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button></div></div>`;
       zone.onclick = null;
-
-      // Inspect dataset
       inspectEvalDataset();
     }
 
@@ -1183,7 +1559,7 @@
       evalFile = null;
       const zone = document.getElementById('evalDropZone');
       zone.classList.remove('has-image');
-      zone.innerHTML = `<svg class="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg><div class="upload-text">点击或拖拽上传测试数据集 ZIP</div><div class="upload-hint">ZIP 格式 · 包含 registered/ 和 test/ 目录及标注文件</div>`;
+      zone.innerHTML = `<svg class="upload-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg><div class="upload-text">点击或拖拽上传测试数据集 ZIP</div><div class="upload-hint">ZIP 格式 &middot; 含 registered/ 和 test/ 目录及标注文件</div>`;
       zone.onclick = () => document.getElementById('evalInput').click();
       document.getElementById('evalInfoCard').style.display = 'none';
       document.getElementById('evalActionCard').style.display = 'none';
@@ -1192,115 +1568,54 @@
 
     async function inspectEvalDataset() {
       if (!evalFile) return;
-      const form = new FormData();
-      form.append('file', evalFile);
-
+      const form = new FormData(); form.append('file', evalFile);
       try {
         const r = await fetch(API + '/dataset-eval/inspect', { method: 'POST', body: form });
         const data = await r.json();
-        const infoCard = document.getElementById('evalInfoCard');
-        const infoList = document.getElementById('evalInfoList');
-        const actionCard = document.getElementById('evalActionCard');
-
-        infoCard.style.display = '';
-        infoList.innerHTML = `<div class="identity-row" style="animation-delay:0s">
-          <div class="identity-row-left">
-            <div class="identity-avatar" style="background:${data.has_registered ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)'};color:${data.has_registered ? 'var(--green)' : 'var(--red)'}">${data.has_registered ? '\u2713' : '\u2717'}</div>
-            <div>
-              <div class="identity-name">${data.has_registered ? '数据集包含注册集目录' : '数据集不包含注册集目录（将使用本地底库）'}</div>
-              <div class="identity-meta">布局检测</div>
-            </div>
-          </div>
-        </div>`;
-
-        if (!r.ok) {
-          toast(data.message || '数据集检查失败', 'error');
-          actionCard.style.display = 'none';
-          return;
-        }
-
-        actionCard.style.display = '';
+        document.getElementById('evalInfoCard').style.display = '';
+        document.getElementById('evalInfoList').innerHTML = `<div class="identity-row" style="animation-delay:0s"><div class="identity-row-left"><div class="identity-avatar" style="background:${data.has_registered ? 'rgba(34,197,94,.08)' : 'rgba(239,68,68,.08)'};color:${data.has_registered ? 'var(--green)' : 'var(--red)'}">${data.has_registered ? '\u2713' : '\u2717'}</div><div><div class="identity-name">${data.has_registered ? '数据集包含注册集目录' : '数据集不包含注册集目录（将使用本地底库）'}</div><div class="identity-meta">布局检测</div></div></div></div>`;
+        if (!r.ok) { toast(data.message || '数据集检查失败', 'error'); document.getElementById('evalActionCard').style.display = 'none'; return; }
+        document.getElementById('evalActionCard').style.display = '';
         document.getElementById('evalStatus').textContent = '';
-      } catch (e) {
-        toast('网络错误，请检查服务是否运行', 'error');
-      }
+      } catch (e) { toast('网络错误，请检查服务是否运行', 'error'); }
     }
 
     async function runEval() {
       if (!evalFile) return;
-
       const btn = document.getElementById('evalRunBtn');
       const status = document.getElementById('evalStatus');
       btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span> 评估中...';
+      btn.innerHTML = '<span class="spinner spinner-white"></span> 评估中...';
       status.textContent = '这可能需要几分钟，请耐心等待...';
-
-      const form = new FormData();
-      form.append('file', evalFile);
-      form.append('gallery_choice', 'local');
-
+      const form = new FormData(); form.append('file', evalFile); form.append('gallery_choice', 'local');
       try {
         const r = await fetch(API + '/dataset-eval/run', { method: 'POST', body: form });
         const data = await r.json();
-
-        if (!r.ok) {
-          toast(data.message || '评估失败', 'error');
-          status.textContent = '';
-          btn.disabled = false;
-          btn.innerHTML = '开始评估';
-          return;
-        }
-
-        // Show results
-        const resultDiv = document.getElementById('evalResult');
-        const summaryDiv = document.getElementById('evalSummary');
-        resultDiv.style.display = '';
-
+        if (!r.ok) { toast(data.message || '评估失败', 'error'); status.textContent = ''; btn.disabled = false; btn.innerHTML = '开始评估'; return; }
+        document.getElementById('evalResult').style.display = '';
         const m = data.metrics;
         const metrics = [
-          { label: 'Strict Top-1 准确率', value: (m.strict_top1_accuracy * 100).toFixed(1) + '%', cls: m.strict_top1_accuracy > 0.5 ? 'green' : 'red' },
-          { label: 'Matched Top-1 准确率', value: (m.matched_top1_accuracy * 100).toFixed(1) + '%', cls: m.matched_top1_accuracy > 0.5 ? 'green' : 'red' },
-          { label: '检测召回率', value: (m.detection_recall * 100).toFixed(1) + '%', cls: m.detection_recall > 0.5 ? 'green' : 'red' },
-          { label: '检测精确率', value: (m.detection_precision * 100).toFixed(1) + '%', cls: m.detection_precision > 0.5 ? 'green' : 'red' },
-          { label: '未知检测准确率', value: (m.unknown_detected_accuracy * 100).toFixed(1) + '%', cls: m.unknown_detected_accuracy > 0.5 ? 'green' : 'red' },
-          { label: '预测未知精确率', value: (m.predicted_unknown_precision * 100).toFixed(1) + '%', cls: m.predicted_unknown_precision > 0.5 ? 'green' : 'red' },
+          { label: 'Strict Top-1 准确率', v: m.strict_top1_accuracy, cls: m.strict_top1_accuracy > 0.5 ? 'green' : 'red' },
+          { label: 'Matched Top-1 准确率', v: m.matched_top1_accuracy, cls: m.matched_top1_accuracy > 0.5 ? 'green' : 'red' },
+          { label: '检测召回率', v: m.detection_recall, cls: m.detection_recall > 0.5 ? 'green' : 'red' },
+          { label: '检测精确率', v: m.detection_precision, cls: m.detection_precision > 0.5 ? 'green' : 'red' },
+          { label: '未知检测准确率', v: m.unknown_detected_accuracy, cls: m.unknown_detected_accuracy > 0.5 ? 'green' : 'red' },
+          { label: '预测未知精确率', v: m.predicted_unknown_precision, cls: m.predicted_unknown_precision > 0.5 ? 'green' : 'red' },
         ];
-
-        summaryDiv.innerHTML = `<div class="eval-summary">${metrics.map(mt => `
-          <div class="eval-metric ${mt.cls}">
-            <div class="eval-metric-value">${mt.value}</div>
-            <div class="eval-metric-label">${mt.label}</div>
-          </div>
-        `).join('')}</div>`;
-
-        // Show plots
+        document.getElementById('evalSummary').innerHTML = `<div class="eval-summary">${metrics.map(mt => `<div class="eval-metric ${mt.cls}"><div class="eval-metric-value">${(mt.v * 100).toFixed(1)}%</div><div class="eval-metric-label">${mt.label}</div></div>`).join('')}</div>`;
         if (data.plots) {
           const plotsCard = document.getElementById('evalPlotsCard');
           const plotsDiv = document.getElementById('evalPlots');
           plotsCard.style.display = '';
-
           let plotsHtml = '';
-          if (data.plots.confusion_matrix) {
-            plotsHtml += `<img class="plot-img" src="${data.plots.confusion_matrix}" alt="混淆矩阵">`;
-          }
-          if (data.plots.detection_metrics) {
-            plotsHtml += `<img class="plot-img" src="${data.plots.detection_metrics}" alt="检测指标">`;
-          }
-          if (data.plots.accuracy_metrics) {
-            plotsHtml += `<img class="plot-img" src="${data.plots.accuracy_metrics}" alt="准确率指标">`;
-          }
+          if (data.plots.confusion_matrix) plotsHtml += `<img class="plot-img" src="${data.plots.confusion_matrix}" alt="混淆矩阵">`;
+          if (data.plots.detection_metrics) plotsHtml += `<img class="plot-img" src="${data.plots.detection_metrics}" alt="检测指标">`;
+          if (data.plots.accuracy_metrics) plotsHtml += `<img class="plot-img" src="${data.plots.accuracy_metrics}" alt="准确率指标">`;
           plotsDiv.innerHTML = plotsHtml;
         }
-
         status.textContent = '评估完成';
         toast('评估完成', 'success');
-      } catch (e) {
-        toast('网络错误或评估超时', 'error');
-        status.textContent = '';
-      } finally {
-        btn.disabled = false;
-        btn.innerHTML = '开始评估';
-      }
+      } catch (e) { toast('网络错误或评估超时', 'error'); status.textContent = ''; } finally { btn.disabled = false; btn.innerHTML = '开始评估'; }
     }
   </script>
 </body>

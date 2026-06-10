@@ -76,6 +76,14 @@ class DetectionIssueModel(BaseModel):
     bbox: list[int]
 
 
+class IdentityDetail(BaseModel):
+    identity_id: str
+    name: str | None = None
+    valid_image_count: int
+    prototype_count: int
+    images: list[str]
+
+
 class DatasetEvalResponse(BaseModel):
     gallery_source: str
     metrics: EvalMetricsModel
