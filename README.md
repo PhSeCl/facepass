@@ -115,8 +115,10 @@ python（优先 `.venv`，否则系统 `python`，再否则 `uv run --no-project
    （`uv sync` 或 `pip install -r requirements.txt`）。
 4. 问 **CPU 还是 GPU**：
    - CPU → 用 `uv run python` / `.venv` python / 全局 `python` 启动；缺 CPU 版 onnxruntime 会补装。
-   - GPU → 一律用 `.venv\Scripts\python.exe` **直接启动**（绕开 `uv run` 回同步）；CUDA 不可用时
-     自动卸载/清理/重装 `onnxruntime-gpu[cuda,cudnn]` 并验证后再启动。
+   - GPU → 使用**独立的 `.venv-gpu`**（与项目 `.venv` 隔离，`uv` 永不回同步它），首次会建好并装上
+     `onnxruntime-gpu[cuda,cudnn]`、验证 CUDA 后启动；**之后复用、不再重装**（即使中途跑过 CPU）。
+     若该机器建不起 `.venv-gpu`（没 uv、python 缺 venv/pip 等），会说明情况让你三选一：装进当前环境 /
+     回退 CPU / 退出。
 5. 把选择写进 `config.toml` 的 `[runtime]`（`device` + `launcher`）。**以后双击直接按它启动**；
    若该环境失效（缺 venv/依赖/CUDA）会自动回退重跑向导。想强制重选：`run.bat --reconfigure`。
 

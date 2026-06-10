@@ -30,6 +30,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -38,6 +39,13 @@ REQUIREMENTS = REPO_ROOT / "requirements.txt"
 RUN_DEV = REPO_ROOT / "scripts" / "run_dev.py"
 VENV_PY = REPO_ROOT / ".venv" / "Scripts" / "python.exe"
 ORT_PACKAGE_DIR = REPO_ROOT / ".venv" / "Lib" / "site-packages" / "onnxruntime"
+
+# Dedicated GPU virtualenv: kept separate from the project .venv so that
+# `uv run`/`uv sync` (which re-sync the CPU-pinned onnxruntime) never clobber the
+# GPU build. Installed once, then reused on every later GPU launch.
+GPU_VENV = REPO_ROOT / ".venv-gpu"
+GPU_VENV_PY = GPU_VENV / "Scripts" / "python.exe"
+GPU_ORT_PACKAGE_DIR = GPU_VENV / "Lib" / "site-packages" / "onnxruntime"
 
 CPU_ONNXRUNTIME = "onnxruntime==1.22.1"
 GPU_ONNXRUNTIME = "onnxruntime-gpu[cuda,cudnn]"
@@ -121,6 +129,8 @@ def resolve_launch_command(launcher: str) -> list[str] | None:
         return ["uv", "run", "python"]
     if launcher == "venv":
         return [str(VENV_PY)]
+    if launcher == "venv-gpu":
+        return [str(GPU_VENV_PY)]
     if launcher == "global":
         python = shutil.which("python") or (sys.executable if sys.executable else None)
         return [python] if python else None
@@ -135,6 +145,8 @@ def _check_interpreter(launcher: str) -> str | None:
     """
     if launcher in ("uv", "venv"):
         return str(VENV_PY) if VENV_PY.exists() else None
+    if launcher == "venv-gpu":
+        return str(GPU_VENV_PY) if GPU_VENV_PY.exists() else None
     if launcher == "global":
         return shutil.which("python")
     return None
@@ -245,41 +257,120 @@ def ensure_cpu_onnxruntime(launcher: str, interpreter: str) -> None:
         subprocess.run([interpreter, "-m", "pip", "install", CPU_ONNXRUNTIME], cwd=str(REPO_ROOT))
 
 
-def ensure_gpu_onnxruntime(launcher: str, interpreter: str) -> bool:
-    """Make CUDAExecutionProvider available in `interpreter`. Returns success."""
-    if cuda_available(interpreter):
+def _pip_uninstall(target_py: str, use_uv: bool, packages: list[str]) -> None:
+    if use_uv:
+        subprocess.run(["uv", "pip", "uninstall", "--python", target_py, *packages], cwd=str(REPO_ROOT))
+    else:
+        subprocess.run([target_py, "-m", "pip", "uninstall", "-y", *packages], cwd=str(REPO_ROOT))
+
+
+def _pip_install(target_py: str, use_uv: bool, args: list[str]) -> int:
+    if use_uv:
+        return subprocess.run(["uv", "pip", "install", "--python", target_py, *args], cwd=str(REPO_ROOT)).returncode
+    return subprocess.run([target_py, "-m", "pip", "install", *args], cwd=str(REPO_ROOT)).returncode
+
+
+def install_gpu_onnxruntime(target_py: str, use_uv: bool, ort_pkg_dir: Path | None) -> bool:
+    """Install onnxruntime-gpu into `target_py` and verify CUDA. Returns success."""
+    if cuda_available(target_py):
         return True
-    print("配置 GPU 版 onnxruntime（会下载 CUDA/cuDNN，可能较久）...")
-    use_uv_pip = launcher == "uv"
-    # 1) Remove any CPU/GPU onnxruntime (they share one import package).
-    if use_uv_pip:
-        subprocess.run(["uv", "pip", "uninstall", "onnxruntime", "onnxruntime-gpu"], cwd=str(REPO_ROOT))
-    else:
-        subprocess.run(
-            [interpreter, "-m", "pip", "uninstall", "-y", "onnxruntime", "onnxruntime-gpu"],
-            cwd=str(REPO_ROOT),
-        )
-    # 2) Clear a leftover empty onnxruntime dir (a known half-uninstall state).
-    if ORT_PACKAGE_DIR.exists():
-        shutil.rmtree(ORT_PACKAGE_DIR, ignore_errors=True)
-    # 3) Install the GPU build, forcing a real (re)install over stale metadata.
-    if use_uv_pip:
-        rc = subprocess.run(
-            ["uv", "pip", "install", "--reinstall", GPU_ONNXRUNTIME], cwd=str(REPO_ROOT)
-        ).returncode
-    else:
-        rc = subprocess.run(
-            [interpreter, "-m", "pip", "install", "--force-reinstall", GPU_ONNXRUNTIME],
-            cwd=str(REPO_ROOT),
-        ).returncode
-    if rc != 0:
+    print("配置 GPU 版 onnxruntime（下载/解压 CUDA、cuDNN；首次较久，之后从 pip/uv 缓存复用）...")
+    _pip_uninstall(target_py, use_uv, ["onnxruntime", "onnxruntime-gpu"])
+    # Clear a leftover empty onnxruntime dir (a known half-uninstall state).
+    if ort_pkg_dir is not None and ort_pkg_dir.exists():
+        shutil.rmtree(ort_pkg_dir, ignore_errors=True)
+    force = "--reinstall" if use_uv else "--force-reinstall"
+    if _pip_install(target_py, use_uv, [force, GPU_ONNXRUNTIME]) != 0:
         print("[错误] 安装 onnxruntime-gpu 失败。")
         return False
-    # 4) Verify.
-    if not cuda_available(interpreter):
+    if not cuda_available(target_py):
         print("[错误] 安装后仍检测不到 CUDAExecutionProvider，请检查 NVIDIA 驱动 / GPU。")
         return False
     return True
+
+
+def create_gpu_venv(has_uv: bool, base_interpreter: str | None) -> bool:
+    """Create the dedicated .venv-gpu (via uv, else the base python's venv module)."""
+    if GPU_VENV_PY.exists():
+        return True
+    print(f"创建 GPU 专用虚拟环境 {GPU_VENV.name} ...")
+    if has_uv:
+        rc = subprocess.run(["uv", "venv", str(GPU_VENV)], cwd=str(REPO_ROOT)).returncode
+    elif base_interpreter:
+        rc = subprocess.run([base_interpreter, "-m", "venv", str(GPU_VENV)], cwd=str(REPO_ROOT)).returncode
+    else:
+        return False
+    return rc == 0 and GPU_VENV_PY.exists()
+
+
+def _install_requirements_without_onnxruntime(target_py: str, use_uv: bool) -> bool:
+    """Install requirements.txt minus onnxruntime (the GPU build is added separately)."""
+    lines = REQUIREMENTS.read_text(encoding="utf-8").splitlines()
+    kept = [ln for ln in lines if not ln.strip().lower().startswith("onnxruntime")]
+    handle = tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8")
+    try:
+        handle.write("\n".join(kept) + "\n")
+        handle.close()
+        return _pip_install(target_py, use_uv, ["-r", handle.name]) == 0
+    finally:
+        os.unlink(handle.name)
+
+
+def setup_gpu_runtime(has_uv: bool, base_launcher: str, base_interpreter: str) -> tuple[str, str] | None:
+    """Prepare a GPU runtime. Returns (launch_token, device) or None to abort.
+
+    Preferred path: a dedicated .venv-gpu that `uv` never re-syncs, so the GPU
+    build is installed once and reused on every later launch (no re-download,
+    even after running CPU mode). If that environment cannot be built, falls back
+    to an interactive choice.
+    """
+    gpu_py = str(GPU_VENV_PY)
+    # Reuse a healthy dedicated env (the common case after first setup).
+    if GPU_VENV_PY.exists():
+        missing = missing_packages(gpu_py)
+        if missing is not None and not missing and cuda_available(gpu_py):
+            print("[OK] 复用已有 GPU 专用环境 .venv-gpu（无需重装）。")
+            return "venv-gpu", "gpu"
+    # Build / repair the dedicated env.
+    if create_gpu_venv(has_uv, base_interpreter):
+        print("向 .venv-gpu 安装依赖 ...")
+        if _install_requirements_without_onnxruntime(gpu_py, has_uv) and install_gpu_onnxruntime(
+            gpu_py, has_uv, GPU_ORT_PACKAGE_DIR
+        ):
+            print("[OK] GPU 专用环境 .venv-gpu 就绪。")
+            return "venv-gpu", "gpu"
+        print("[警告] 配置 .venv-gpu 失败。")
+    else:
+        print("[警告] 无法创建 GPU 专用虚拟环境 .venv-gpu。")
+    return _gpu_fallback_choice(has_uv, base_launcher, base_interpreter)
+
+
+def _gpu_fallback_choice(has_uv: bool, base_launcher: str, base_interpreter: str) -> tuple[str, str] | None:
+    print()
+    print("无法建立 GPU 专用环境（.venv-gpu）。可能原因：没有 uv、当前 python 缺少 venv/pip，或权限/磁盘问题。")
+    print("请选择如何处理：")
+    print("  [1] 把 onnxruntime-gpu 直接装进当前环境（可用，但之后切到 CPU 会覆盖它、再切回 GPU 需重装）")
+    print("  [2] 回退到 CPU 运行")
+    print("  [3] 放弃，退出")
+    while True:
+        try:
+            answer = input("输入 1 / 2 / 3: ").strip()
+        except EOFError:
+            return None
+        if answer == "1":
+            use_uv_pip = base_launcher == "uv"
+            ort_dir = ORT_PACKAGE_DIR if base_interpreter == str(VENV_PY) else None
+            if install_gpu_onnxruntime(base_interpreter, use_uv_pip, ort_dir):
+                # Launch via the interpreter directly (never `uv run`) so the
+                # just-installed GPU build is not immediately re-synced away.
+                return ("global" if base_launcher == "global" else "venv"), "gpu"
+            print("[错误] 在当前环境安装 GPU 失败。")
+            return None
+        if answer == "2":
+            return base_launcher, "cpu"
+        if answer == "3":
+            return None
+        print("请输入 1、2 或 3。")
 
 
 # --------------------------------------------------------------------------- #
@@ -342,16 +433,17 @@ def run_wizard(has_uv: bool) -> tuple[str, str] | None:
 
     # CPU / GPU.
     device = ask_device()
-    launch_token = launcher
     if device == "gpu":
-        # GPU must launch via the interpreter directly, never `uv run` (which
-        # would re-sync the locked CPU onnxruntime over the GPU build).
-        if launcher == "uv":
-            launch_token = "venv"
-        if not ensure_gpu_onnxruntime(launcher, interpreter):
+        result = setup_gpu_runtime(has_uv, launcher, interpreter)
+        if result is None:
             return None
+        launch_token, device = result
+        if device == "cpu":
+            # User chose the CPU fallback when no GPU env could be built.
+            ensure_cpu_onnxruntime(launch_token, interpreter)
     else:
         ensure_cpu_onnxruntime(launcher, interpreter)
+        launch_token = launcher
 
     save_runtime(device, launch_token)
     print(f"[OK] 已保存运行配置到 config.toml: device={device}, launcher={launch_token}")
@@ -378,7 +470,7 @@ def launch(launcher: str, device: str) -> int:
 def runtime_is_valid(runtime: dict[str, str], has_uv: bool) -> bool:
     launcher = runtime.get("launcher")
     device = runtime.get("device")
-    if launcher not in ("uv", "venv", "global") or device not in ("cpu", "gpu"):
+    if launcher not in ("uv", "venv", "venv-gpu", "global") or device not in ("cpu", "gpu"):
         return False
     if launcher == "uv" and not has_uv:
         return False

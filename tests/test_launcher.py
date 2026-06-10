@@ -83,9 +83,18 @@ def test_save_runtime_creates_file_when_absent(tmp_path, monkeypatch) -> None:
 def test_resolve_launch_command_tokens(monkeypatch) -> None:
     assert launcher.resolve_launch_command("uv") == ["uv", "run", "python"]
     assert launcher.resolve_launch_command("venv") == [str(launcher.VENV_PY)]
+    assert launcher.resolve_launch_command("venv-gpu") == [str(launcher.GPU_VENV_PY)]
     monkeypatch.setattr(launcher.shutil, "which", lambda name: "C:/py/python.exe")
     assert launcher.resolve_launch_command("global") == ["C:/py/python.exe"]
     assert launcher.resolve_launch_command("bogus") is None
+
+
+def test_runtime_is_valid_accepts_dedicated_gpu_venv(monkeypatch) -> None:
+    monkeypatch.setattr(launcher, "_check_interpreter", lambda token: "GPUPY")
+    monkeypatch.setattr(launcher, "missing_packages", lambda interp: [])
+    monkeypatch.setattr(launcher, "has_onnxruntime", lambda interp: True)
+    monkeypatch.setattr(launcher, "cuda_available", lambda interp: True)
+    assert launcher.runtime_is_valid({"launcher": "venv-gpu", "device": "gpu"}, has_uv=False) is True
 
 
 def test_runtime_is_valid_happy_path(monkeypatch) -> None:
