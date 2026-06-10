@@ -104,11 +104,15 @@ uv pip install "onnxruntime-gpu[cuda,cudnn]"
 
 直接双击仓库根的 `run.bat` 即可启动。它做了健壮性处理，**不会再出现“终端一闪而过”**：
 
-- 优先用 `uv run python` 启动；**找不到 `uv` 时自动退回系统 `python`**；两者都没有才提示去安装。
+- 启动时**先让你选 CPU 还是 GPU 运行时**（按 `C` 或 `G`）。
+- 选 **CPU**：优先用 `uv run python` 启动；**找不到 `uv` 时自动退回系统 `python`**；两者都没有才提示去安装。
+- 选 **GPU**：用 `.venv\Scripts\python.exe` **直接启动**（绕开 `uv run` 的回同步，避免把 GPU 版 onnxruntime 换回 CPU 版）。若检测到 CUDA 尚不可用，会自动**卸载并重装 `onnxruntime-gpu[cuda,cudnn]`、清理残留包目录、再验证** `CUDAExecutionProvider` 后才启动；已可用则直接走。
 - 启动前预检依赖，**缺哪个库就按 pip 包名逐条打印**（并给出 `uv sync` / `pip install ...` 建议），而不是抛一堆 traceback。
 - 缺少 `config.toml`、或进程异常退出时，会**停下来显示错误码与常见原因**，方便排查。
 
 启动后浏览器打开 `http://127.0.0.1:8000` 即是 Web 界面。
+
+> 提示：GPU 默认依赖仍是 CPU 版（见「依赖」一节，为 CI/可移植性），`run.bat` 的 GPU 选项只在本机 `.venv` 内切换，不改仓库默认。手动用 `uv run` 启动会按锁文件回同步、把 GPU 版换回 CPU，因此 GPU 场景请走 `run.bat` 的 G 选项或直接用 `.venv\Scripts\python.exe`。
 
 ### 方式二：命令行启动
 
