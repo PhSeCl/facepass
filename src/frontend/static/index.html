@@ -23,8 +23,39 @@
       --red: #ef4444;
       --shadow: 0 8px 32px rgba(31, 38, 135, .12);
       --shadow-lg: 0 12px 40px rgba(31, 38, 135, .18);
+      --hover-bg: rgba(255, 255, 255, .4);
+      --hover-strong: #ffffff;
+      --skeleton-1: rgba(255, 255, 255, .35);
+      --skeleton-2: rgba(255, 255, 255, .65);
       --radius: 18px;
       --radius-sm: 12px;
+      --bg-grad:
+        radial-gradient(circle at 12% 18%, rgba(129, 140, 248, .35), transparent 42%),
+        radial-gradient(circle at 88% 12%, rgba(236, 72, 153, .22), transparent 45%),
+        radial-gradient(circle at 78% 88%, rgba(34, 211, 238, .28), transparent 45%),
+        linear-gradient(135deg, #eef2ff 0%, #faf5ff 38%, #fdf2f8 68%, #ecfeff 100%);
+    }
+
+    html[data-theme="dark"] {
+      --bg: #0a0f1f;
+      --surface: rgba(255, 255, 255, .07);
+      --surface2: rgba(255, 255, 255, .045);
+      --surface-strong: rgba(255, 255, 255, .1);
+      --border: rgba(255, 255, 255, .12);
+      --border-soft: rgba(139, 142, 248, .35);
+      --text: #e9ebf5;
+      --text2: #9aa1b4;
+      --shadow: 0 8px 32px rgba(0, 0, 0, .45);
+      --shadow-lg: 0 12px 40px rgba(0, 0, 0, .6);
+      --hover-bg: rgba(255, 255, 255, .08);
+      --hover-strong: rgba(255, 255, 255, .16);
+      --skeleton-1: rgba(255, 255, 255, .05);
+      --skeleton-2: rgba(255, 255, 255, .12);
+      --bg-grad:
+        radial-gradient(circle at 12% 18%, rgba(99, 102, 241, .28), transparent 45%),
+        radial-gradient(circle at 88% 12%, rgba(168, 85, 247, .2), transparent 48%),
+        radial-gradient(circle at 78% 88%, rgba(14, 165, 233, .18), transparent 48%),
+        linear-gradient(135deg, #0b1020 0%, #141026 45%, #1a1030 72%, #0a0f1f 100%);
     }
 
     * {
@@ -38,12 +69,9 @@
       color: var(--text);
       min-height: 100vh;
       -webkit-font-smoothing: antialiased;
-      background:
-        radial-gradient(circle at 12% 18%, rgba(129, 140, 248, .35), transparent 42%),
-        radial-gradient(circle at 88% 12%, rgba(236, 72, 153, .22), transparent 45%),
-        radial-gradient(circle at 78% 88%, rgba(34, 211, 238, .28), transparent 45%),
-        linear-gradient(135deg, #eef2ff 0%, #faf5ff 38%, #fdf2f8 68%, #ecfeff 100%);
+      background: var(--bg-grad);
       background-attachment: fixed;
+      transition: color .3s ease;
     }
 
     .app {
@@ -187,7 +215,7 @@
 
     .upload-zone:hover {
       border-color: var(--accent);
-      background: rgba(255, 255, 255, .4);
+      background: var(--hover-bg);
     }
 
     .upload-zone.drag {
@@ -363,7 +391,7 @@
     }
 
     .btn-secondary:hover {
-      background: #fff;
+      background: var(--hover-strong);
       transform: translateY(-2px);
       box-shadow: 0 6px 18px rgba(31, 38, 135, .14);
     }
@@ -611,7 +639,7 @@
 
     /* Loading skeleton */
     .skeleton {
-      background: linear-gradient(90deg, rgba(255, 255, 255, .35) 25%, rgba(255, 255, 255, .65) 50%, rgba(255, 255, 255, .35) 75%);
+      background: linear-gradient(90deg, var(--skeleton-1) 25%, var(--skeleton-2) 50%, var(--skeleton-1) 75%);
       background-size: 200% 100%;
       animation: shimmer 1.5s ease-in-out infinite;
       border-radius: var(--radius-sm);
@@ -781,6 +809,53 @@
       border: 1px solid var(--border);
     }
 
+    /* Theme toggle */
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .theme-toggle {
+      width: 40px;
+      height: 40px;
+      flex-shrink: 0;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--surface-strong);
+      color: var(--text);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      box-shadow: var(--shadow);
+      transition: transform .25s ease, box-shadow .25s ease, background .25s ease;
+    }
+
+    .theme-toggle:hover {
+      transform: translateY(-2px) rotate(-12deg);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .theme-toggle svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .theme-toggle .icon-moon {
+      display: none;
+    }
+
+    html[data-theme="dark"] .theme-toggle .icon-sun {
+      display: none;
+    }
+
+    html[data-theme="dark"] .theme-toggle .icon-moon {
+      display: block;
+    }
+
     /* Gallery photo in recognize results */
     .gallery-photo {
       width: 72px;
@@ -799,9 +874,20 @@
     <!-- Header -->
     <div class="header">
       <div class="logo">FacePass</div>
-      <div class="status">
-        <div class="status-dot" id="statusDot"></div>
-        <span id="statusText">检测中...</span>
+      <div class="header-right">
+        <div class="status">
+          <div class="status-dot" id="statusDot"></div>
+          <span id="statusText">检测中...</span>
+        </div>
+        <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="切换亮/暗主题" aria-label="切换亮暗主题">
+          <svg class="icon-sun" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="4" />
+            <path stroke-linecap="round" d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+          </svg>
+          <svg class="icon-moon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+          </svg>
+        </button>
       </div>
     </div>
 
@@ -937,10 +1023,28 @@
 
   <script>
     const API = 'http://127.0.0.1:8000';
+    const THEME_KEY = 'facepass-theme';
     let recognizeFile = null;
     let registerFiles = [];
     let evalFile = null;
     let evalDir = null;
+
+    // Apply the saved theme (or follow the OS preference) immediately, before the
+    // page paints, so there is no flash of the wrong theme.
+    (function initTheme() {
+      let theme = null;
+      try { theme = localStorage.getItem(THEME_KEY); } catch (e) { /* storage blocked */ }
+      if (theme !== 'dark' && theme !== 'light') {
+        theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      document.documentElement.dataset.theme = theme;
+    })();
+
+    function toggleTheme() {
+      const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+      document.documentElement.dataset.theme = next;
+      try { localStorage.setItem(THEME_KEY, next); } catch (e) { /* storage blocked */ }
+    }
 
     document.addEventListener('DOMContentLoaded', () => {
       checkHealth();
