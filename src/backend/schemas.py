@@ -36,6 +36,14 @@ class IdentitiesResponse(BaseModel):
     identities: list[IdentitySummary]
 
 
+class IdentityDetail(BaseModel):
+    identity_id: str
+    name: str | None = None
+    valid_image_count: int
+    prototype_count: int
+    images: list[str]
+
+
 class RegisterResponse(BaseModel):
     identity_id: str
     name: str

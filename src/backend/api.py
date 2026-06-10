@@ -9,7 +9,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -53,6 +53,7 @@ from .schemas import (
     EvalMetricsModel,
     EvalPlotsModel,
     IdentitiesResponse,
+    IdentityDetail,
     IdentitySummary,
     PickDirectoryResponse,
     RecognitionResultModel,
@@ -363,6 +364,14 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/logo")
+def logo():
+    logo_path = Path(__file__).resolve().parents[2] / "design" / "facepass.png"
+    if not logo_path.exists():
+        raise HTTPException(status_code=404, detail={"message": "Logo not found"})
+    return FileResponse(logo_path, media_type="image/png")
+
+
 @app.get("/identity/{identity_id}/image")
 def identity_image(identity_id: str):
     identity_dir = settings.registered_dir / identity_id
@@ -373,6 +382,45 @@ def identity_image(identity_id: str):
         if child.suffix.lower() in image_extensions:
             return FileResponse(child, media_type=f"image/{child.suffix.lstrip('.').replace('jpg', 'jpeg')}")
     raise HTTPException(status_code=404, detail={"message": f"身份 {identity_id} 没有注册图片"})
+
+
+@app.get("/identity/{identity_id}/image/{filename}")
+def identity_image_file(identity_id: str, filename: str):
+    identity_dir = settings.registered_dir / identity_id
+    if not identity_dir.exists() or not identity_dir.is_dir():
+        raise HTTPException(status_code=404, detail={"message": f"身份不存在: {identity_id}"})
+    # Guard against path traversal: the filename must resolve to a direct child of
+    # identity_dir (a bare name with no separators / "..").
+    if Path(filename).name != filename:
+        raise HTTPException(status_code=404, detail={"message": f"图片不存在: {filename}"})
+    image_path = identity_dir / filename
+    if not image_path.exists() or not image_path.is_file():
+        raise HTTPException(status_code=404, detail={"message": f"图片不存在: {filename}"})
+    suffix = image_path.suffix.lstrip(".").replace("jpg", "jpeg")
+    return FileResponse(image_path, media_type=f"image/{suffix}")
+
+
+@app.get("/identity/{identity_id}/detail", response_model=IdentityDetail)
+def identity_detail(identity_id: str) -> IdentityDetail:
+    identity_dir = settings.registered_dir / identity_id
+    if not identity_dir.exists() or not identity_dir.is_dir():
+        raise HTTPException(status_code=404, detail={"message": f"身份不存在: {identity_id}"})
+    image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+    images = sorted(
+        child.name
+        for child in identity_dir.iterdir()
+        if child.is_file() and child.suffix.lower() in image_extensions
+    )
+    if not images:
+        raise HTTPException(status_code=404, detail={"message": f"身份 {identity_id} 没有注册图片"})
+    stats = next((item for item in _gallery.identities() if str(item["identity_id"]) == identity_id), {})
+    return IdentityDetail(
+        identity_id=identity_id,
+        name=_id2name.get(identity_id),
+        valid_image_count=int(stats.get("valid_image_count", len(images))),
+        prototype_count=int(stats.get("prototype_count", 1)),
+        images=images,
+    )
 
 
 @app.get("/identities", response_model=IdentitiesResponse)
