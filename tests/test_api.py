@@ -563,3 +563,74 @@ def test_pick_directory_reports_unavailable_dialog_as_400(monkeypatch) -> None:
 
     assert response.status_code == 400
     assert response.json()["message"] == "没有图形界面"
+
+
+def _make_identity_dir(tmp_path, identity_id="p01", files=("a.jpg", "b.png")):
+    identity_dir = tmp_path / "registered" / identity_id
+    identity_dir.mkdir(parents=True)
+    for name in files:
+        (identity_dir / name).write_bytes(b"\x89PNG\r\n\x1a\n")
+    return tmp_path / "registered"
+
+
+def test_logo_endpoint_serves_png() -> None:
+    client = TestClient(app)
+    response = client.get("/logo")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/png")
+
+
+def test_identity_detail_returns_images_and_stats(monkeypatch, tmp_path) -> None:
+    registered = _make_identity_dir(tmp_path)
+    monkeypatch.setattr(api, "settings", SimpleNamespace(registered_dir=registered))
+    monkeypatch.setattr(
+        api,
+        "_gallery",
+        SimpleNamespace(identities=lambda: [
+            {"identity_id": "p01", "count": 2, "prototype_count": 2, "valid_image_count": 5}
+        ]),
+    )
+    monkeypatch.setattr(api, "_id2name", {"p01": "Alice"})
+    client = TestClient(app)
+
+    response = client.get("/identity/p01/detail")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["identity_id"] == "p01"
+    assert data["name"] == "Alice"
+    assert data["valid_image_count"] == 5
+    assert data["prototype_count"] == 2
+    assert data["images"] == ["a.jpg", "b.png"]
+
+
+def test_identity_detail_returns_404_for_unknown_identity(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(api, "settings", SimpleNamespace(registered_dir=tmp_path / "registered"))
+    client = TestClient(app)
+
+    response = client.get("/identity/ghost/detail")
+
+    assert response.status_code == 404
+
+
+def test_identity_image_file_serves_named_image(monkeypatch, tmp_path) -> None:
+    registered = _make_identity_dir(tmp_path, files=("a.jpg",))
+    monkeypatch.setattr(api, "settings", SimpleNamespace(registered_dir=registered))
+    client = TestClient(app)
+
+    response = client.get("/identity/p01/image/a.jpg")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/jpeg")
+
+
+def test_identity_image_file_rejects_path_traversal(monkeypatch, tmp_path) -> None:
+    registered = _make_identity_dir(tmp_path, files=("a.jpg",))
+    (tmp_path / "secret.txt").write_text("top secret", encoding="utf-8")
+    monkeypatch.setattr(api, "settings", SimpleNamespace(registered_dir=registered))
+    client = TestClient(app)
+
+    # A backslash-laden name must not escape the identity directory.
+    response = client.get("/identity/p01/image/..%5C..%5Csecret.txt")
+
+    assert response.status_code == 404
