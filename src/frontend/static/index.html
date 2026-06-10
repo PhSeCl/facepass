@@ -7,17 +7,61 @@
   <title>FacePass</title>
   <style>
     :root {
-      --bg: #0a0a0a;
-      --surface: #141414;
-      --surface2: #1c1c1c;
-      --border: #2a2a2a;
-      --text: #e8e8e8;
-      --text2: #949494;
-      --accent: #fafafa;
-      --green: #22c55e;
+      --bg: #eef2ff;
+      /* Frosted glass surfaces: translucent white over the gradient backdrop. */
+      --surface: rgba(255, 255, 255, .55);
+      --surface2: rgba(255, 255, 255, .4);
+      --surface-strong: rgba(255, 255, 255, .72);
+      --border: rgba(255, 255, 255, .65);
+      --border-soft: rgba(var(--accent-rgb),.18);
+      --text: #1e2433;
+      --text2: #6b7280;
+      --accent: #6366f1;
+      --accent2: #8b5cf6;
+      --accent-rgb: 99, 102, 241;
+      --accent-grad: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      --green: #16a34a;
       --red: #ef4444;
-      --radius: 12px;
-      --radius-sm: 8px;
+      --shadow: 0 8px 32px rgba(31, 38, 135, .12);
+      --shadow-lg: 0 12px 40px rgba(31, 38, 135, .18);
+      --hover-bg: rgba(255, 255, 255, .4);
+      --hover-strong: #ffffff;
+      --skeleton-1: rgba(255, 255, 255, .35);
+      --skeleton-2: rgba(255, 255, 255, .65);
+      --radius: 18px;
+      --radius-sm: 12px;
+      --bg-grad:
+        radial-gradient(circle at 12% 18%, rgba(129, 140, 248, .35), transparent 42%),
+        radial-gradient(circle at 88% 12%, rgba(236, 72, 153, .22), transparent 45%),
+        radial-gradient(circle at 78% 88%, rgba(34, 211, 238, .28), transparent 45%),
+        linear-gradient(135deg, #eef2ff 0%, #faf5ff 38%, #fdf2f8 68%, #ecfeff 100%);
+    }
+
+    html[data-theme="dark"] {
+      --bg: #0a0a0c;
+      --surface: rgba(255, 255, 255, .055);
+      --surface2: rgba(255, 255, 255, .035);
+      --surface-strong: rgba(255, 255, 255, .08);
+      --border: rgba(255, 255, 255, .1);
+      --border-soft: rgba(255, 255, 255, .18);
+      --text: #ededf0;
+      --text2: #9a9aa3;
+      /* Dark mode accent: a deeper true blue (not the purple-leaning indigo). */
+      --accent: #4f8ef7;
+      --accent2: #6aa6ff;
+      --accent-rgb: 61, 130, 246;
+      --accent-grad: linear-gradient(135deg, #2563eb 0%, #4f8ef7 100%);
+      --shadow: 0 8px 32px rgba(0, 0, 0, .55);
+      --shadow-lg: 0 12px 40px rgba(0, 0, 0, .7);
+      --hover-bg: rgba(255, 255, 255, .06);
+      --hover-strong: rgba(255, 255, 255, .14);
+      --skeleton-1: rgba(255, 255, 255, .04);
+      --skeleton-2: rgba(255, 255, 255, .1);
+      /* Deep neutral charcoal, barely-there cool sheen — no indigo/violet cast. */
+      --bg-grad:
+        radial-gradient(circle at 15% 12%, rgba(255, 255, 255, .035), transparent 40%),
+        radial-gradient(circle at 85% 88%, rgba(255, 255, 255, .025), transparent 42%),
+        linear-gradient(135deg, #0b0b0d 0%, #111113 48%, #0a0a0c 100%);
     }
 
     * {
@@ -28,10 +72,12 @@
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-      background: var(--bg);
       color: var(--text);
       min-height: 100vh;
       -webkit-font-smoothing: antialiased;
+      background: var(--bg-grad);
+      background-attachment: fixed;
+      transition: color .3s ease;
     }
 
     .app {
@@ -53,8 +99,9 @@
       font-size: 20px;
       font-weight: 600;
       letter-spacing: -0.5px;
-      background: linear-gradient(135deg, #fff 0%, #888 100%);
+      background: var(--accent-grad);
       -webkit-background-clip: text;
+      background-clip: text;
       -webkit-text-fill-color: transparent;
     }
 
@@ -79,29 +126,33 @@
       box-shadow: 0 0 8px rgba(34, 197, 94, .5);
     }
 
-    /* Tabs */
+    /* Tabs — each tab is its own distinct rounded "block" capsule */
     .tabs {
       display: flex;
-      gap: 4px;
+      gap: 10px;
       background: var(--surface);
-      border-radius: var(--radius);
-      padding: 4px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 8px;
       margin-bottom: 40px;
+      backdrop-filter: blur(20px) saturate(160%);
+      -webkit-backdrop-filter: blur(20px) saturate(160%);
+      box-shadow: var(--shadow);
       animation: fadeUp .5s ease .1s both;
     }
 
     .tab {
       flex: 1;
       padding: 12px 20px;
-      border-radius: 9px;
+      border-radius: 999px;
       font-size: 14px;
-      font-weight: 500;
+      font-weight: 600;
       text-align: center;
       cursor: pointer;
       transition: all .25s ease;
       color: var(--text2);
-      background: transparent;
-      border: none;
+      background: var(--surface2);
+      border: 1px solid var(--border);
       font-family: inherit;
       position: relative;
       overflow: hidden;
@@ -109,20 +160,24 @@
 
     .tab:hover {
       color: var(--text);
+      background: var(--hover-bg);
+      transform: translateY(-1px);
     }
 
     .tab.active {
-      background: var(--surface2);
-      color: var(--text);
+      background: var(--surface-strong);
+      border-color: rgba(var(--accent-rgb),.5);
+      color: var(--accent);
+      box-shadow: 0 4px 14px rgba(var(--accent-rgb),.22);
     }
 
     .tab.active::after {
       content: '';
       position: absolute;
-      bottom: 4px;
+      bottom: 5px;
       left: 50%;
       transform: translateX(-50%);
-      width: 24px;
+      width: 22px;
       height: 2px;
       border-radius: 1px;
       background: var(--accent);
@@ -136,12 +191,16 @@
       border-radius: var(--radius);
       padding: 32px;
       margin-bottom: 24px;
+      backdrop-filter: blur(22px) saturate(170%);
+      -webkit-backdrop-filter: blur(22px) saturate(170%);
+      box-shadow: var(--shadow);
       animation: fadeUp .4s ease .15s both;
-      transition: border-color .3s ease;
+      transition: box-shadow .3s ease, transform .3s ease, border-color .3s ease;
     }
 
     .card:hover {
-      border-color: #333;
+      border-color: var(--border-soft);
+      box-shadow: var(--shadow-lg);
     }
 
     .card-title {
@@ -153,7 +212,7 @@
 
     /* Upload Zone */
     .upload-zone {
-      border: 2px dashed var(--border);
+      border: 2px dashed rgba(var(--accent-rgb),.35);
       border-radius: var(--radius);
       padding: 48px 24px;
       text-align: center;
@@ -164,13 +223,13 @@
     }
 
     .upload-zone:hover {
-      border-color: #555;
-      background: var(--surface2);
+      border-color: var(--accent);
+      background: var(--hover-bg);
     }
 
     .upload-zone.drag {
       border-color: var(--accent);
-      background: var(--surface2);
+      background: rgba(var(--accent-rgb),.08);
     }
 
     .upload-zone.has-image {
@@ -261,23 +320,25 @@
     .form-input {
       width: 100%;
       padding: 12px 16px;
-      background: var(--surface2);
+      background: var(--surface-strong);
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
       color: var(--text);
       font-size: 15px;
       font-family: inherit;
       outline: none;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
       transition: all .25s ease;
     }
 
     .form-input:focus {
-      border-color: #555;
-      box-shadow: 0 0 0 3px rgba(255, 255, 255, .04);
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(var(--accent-rgb),.15);
     }
 
     .form-input::placeholder {
-      color: #555;
+      color: #9ca3af;
     }
 
     /* Buttons */
@@ -287,9 +348,9 @@
       justify-content: center;
       gap: 8px;
       padding: 12px 28px;
-      border-radius: var(--radius-sm);
+      border-radius: 999px;
       font-size: 14px;
-      font-weight: 500;
+      font-weight: 600;
       cursor: pointer;
       transition: all .25s ease;
       font-family: inherit;
@@ -308,34 +369,40 @@
     }
 
     .btn:active::after {
-      background: rgba(255, 255, 255, .1);
+      background: rgba(255, 255, 255, .18);
     }
 
     .btn-primary {
-      background: var(--accent);
-      color: #0a0a0a;
+      background: var(--accent-grad);
+      color: #fff;
+      box-shadow: 0 6px 18px rgba(var(--accent-rgb),.35);
     }
 
     .btn-primary:hover {
-      opacity: .85;
-      transform: translateY(-1px);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 26px rgba(var(--accent-rgb),.45);
     }
 
     .btn-primary:disabled {
-      opacity: .35;
+      opacity: .4;
       cursor: not-allowed;
       transform: none;
+      box-shadow: none;
     }
 
     .btn-secondary {
-      background: var(--surface2);
+      background: var(--surface-strong);
       color: var(--text);
       border: 1px solid var(--border);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      box-shadow: 0 2px 10px rgba(31, 38, 135, .08);
     }
 
     .btn-secondary:hover {
-      background: #252525;
-      transform: translateY(-1px);
+      background: var(--hover-strong);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 18px rgba(31, 38, 135, .14);
     }
 
     /* Spinner */
@@ -363,7 +430,8 @@
     }
 
     .result-card:hover {
-      border-color: #333;
+      border-color: var(--border-soft);
+      box-shadow: 0 6px 18px rgba(31, 38, 135, .1);
       transform: translateX(4px);
     }
 
@@ -532,7 +600,7 @@
     }
 
     .identity-row:hover {
-      background: #222;
+      background: rgba(var(--accent-rgb),.1);
       transform: translateX(4px);
     }
 
@@ -580,7 +648,7 @@
 
     /* Loading skeleton */
     .skeleton {
-      background: linear-gradient(90deg, var(--surface2) 25%, #252525 50%, var(--surface2) 75%);
+      background: linear-gradient(90deg, var(--skeleton-1) 25%, var(--skeleton-2) 50%, var(--skeleton-1) 75%);
       background-size: 200% 100%;
       animation: shimmer 1.5s ease-in-out infinite;
       border-radius: var(--radius-sm);
@@ -712,11 +780,14 @@
     }
 
     .eval-metric {
-      background: var(--surface2);
+      background: var(--surface-strong);
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
       padding: 16px;
       text-align: center;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      box-shadow: 0 4px 14px rgba(31, 38, 135, .08);
     }
 
     .eval-metric-value {
@@ -747,6 +818,53 @@
       border: 1px solid var(--border);
     }
 
+    /* Theme toggle */
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .theme-toggle {
+      width: 40px;
+      height: 40px;
+      flex-shrink: 0;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--surface-strong);
+      color: var(--text);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      box-shadow: var(--shadow);
+      transition: transform .25s ease, box-shadow .25s ease, background .25s ease;
+    }
+
+    .theme-toggle:hover {
+      transform: translateY(-2px) rotate(-12deg);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .theme-toggle svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .theme-toggle .icon-moon {
+      display: none;
+    }
+
+    html[data-theme="dark"] .theme-toggle .icon-sun {
+      display: none;
+    }
+
+    html[data-theme="dark"] .theme-toggle .icon-moon {
+      display: block;
+    }
+
     /* Gallery photo in recognize results */
     .gallery-photo {
       width: 72px;
@@ -765,9 +883,20 @@
     <!-- Header -->
     <div class="header">
       <div class="logo">FacePass</div>
-      <div class="status">
-        <div class="status-dot" id="statusDot"></div>
-        <span id="statusText">检测中...</span>
+      <div class="header-right">
+        <div class="status">
+          <div class="status-dot" id="statusDot"></div>
+          <span id="statusText">检测中...</span>
+        </div>
+        <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="切换亮/暗主题" aria-label="切换亮暗主题">
+          <svg class="icon-sun" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="4" />
+            <path stroke-linecap="round" d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+          </svg>
+          <svg class="icon-moon" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+          </svg>
+        </button>
       </div>
     </div>
 
@@ -903,10 +1032,28 @@
 
   <script>
     const API = 'http://127.0.0.1:8000';
+    const THEME_KEY = 'facepass-theme';
     let recognizeFile = null;
     let registerFiles = [];
     let evalFile = null;
     let evalDir = null;
+
+    // Apply the saved theme (or follow the OS preference) immediately, before the
+    // page paints, so there is no flash of the wrong theme.
+    (function initTheme() {
+      let theme = null;
+      try { theme = localStorage.getItem(THEME_KEY); } catch (e) { /* storage blocked */ }
+      if (theme !== 'dark' && theme !== 'light') {
+        theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      document.documentElement.dataset.theme = theme;
+    })();
+
+    function toggleTheme() {
+      const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+      document.documentElement.dataset.theme = next;
+      try { localStorage.setItem(THEME_KEY, next); } catch (e) { /* storage blocked */ }
+    }
 
     document.addEventListener('DOMContentLoaded', () => {
       checkHealth();
