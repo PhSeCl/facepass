@@ -3,18 +3,25 @@ REM ASCII-only on purpose: chcp/UTF-8 breaks on GBK consoles. This file is a thi
 REM bootstrap; all real logic (env detection, deps, CPU/GPU, launch) lives in the
 REM stdlib-only scripts\launcher.py so it can run under any interpreter found here.
 
-REM Prefer Windows Terminal: when launched from Explorer (a legacy conhost window)
-REM and wt.exe is available, relaunch this script inside Windows Terminal. WT_SESSION
-REM is set by Windows Terminal for its children, so this never loops. To opt out,
-REM set FACEPASS_NO_WT=1.
-if not defined WT_SESSION if not defined FACEPASS_NO_WT (
-    REM Note the trailing "." on the directory: %~dp0 ends with a backslash, and
-    REM "...\" would let wt treat \" as an escaped quote and swallow the rest.
-    where wt >nul 2>nul && (
-        start "" wt.exe -d "%~dp0." cmd /c "%~nx0 %*"
-        exit /b
-    )
+REM Prefer Windows Terminal, and inside it PowerShell (pwsh > powershell) rather
+REM than the legacy cmd window, when launched from Explorer. WT_SESSION is set by
+REM Windows Terminal for its children, so this never loops; the re-entered run.bat
+REM then runs the launcher in that shell. Set FACEPASS_NO_WT=1 to opt out.
+REM Note the trailing "." on -d: %~dp0 ends with a backslash and "...\" would let wt
+REM treat \" as an escaped quote and swallow the rest of the command line.
+if defined WT_SESSION goto after_wt
+if defined FACEPASS_NO_WT goto after_wt
+where wt >nul 2>nul || goto after_wt
+set "WTSHELL=cmd"
+where pwsh >nul 2>nul && set "WTSHELL=pwsh"
+if "%WTSHELL%"=="cmd" ( where powershell >nul 2>nul && set "WTSHELL=powershell" )
+if "%WTSHELL%"=="cmd" (
+    start "" wt.exe -d "%~dp0." cmd /c "%~nx0 %*"
+) else (
+    start "" wt.exe -d "%~dp0." %WTSHELL% -NoLogo -NoExit -Command "& '%~f0' %*"
 )
+exit /b
+:after_wt
 
 setlocal
 cd /d "%~dp0"

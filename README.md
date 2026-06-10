@@ -103,9 +103,9 @@ uv pip install "onnxruntime-gpu[cuda,cudnn]"
 
 ### 方式一：双击 `run.bat`（Windows 最简单）
 
-直接双击仓库根的 `run.bat` 即可启动。若机器装了 **Windows Terminal**（`wt`），双击会自动
-在 Windows Terminal 里重新打开，而不是旧的 cmd 窗口（已在终端里运行时不会重开；想关掉这个行为
-设环境变量 `FACEPASS_NO_WT=1`）。`run.bat` 只是个瘦壳——找到一台机器上任意可用的 python
+直接双击仓库根的 `run.bat` 即可启动。若机器装了 **Windows Terminal**（`wt`），双击会自动在 Windows Terminal 里重新打开，
+并优先用 **PowerShell**（`pwsh` > `powershell`，都没有才退回 `cmd`），而不是旧的 cmd 窗口
+（已在终端里运行时不会重开；想关掉这个行为设环境变量 `FACEPASS_NO_WT=1`）。`run.bat` 只是个瘦壳——找到一台机器上任意可用的 python
 （优先 `.venv`，否则系统 `python`，再否则 `uv run --no-project python`）去运行
 `scripts/launcher.py`，由后者完成**首次启动向导**：
 
