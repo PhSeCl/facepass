@@ -46,11 +46,11 @@
       --border-soft: rgba(255, 255, 255, .18);
       --text: #ededf0;
       --text2: #9a9aa3;
-      /* Dark mode accent: soft pink-white instead of indigo/violet. */
-      --accent: #f0d6e2;
-      --accent2: #f7e6ef;
-      --accent-rgb: 240, 214, 226;
-      --accent-grad: linear-gradient(135deg, #f9e7f0 0%, #e8cdda 100%);
+      /* Dark mode accent: a deeper true blue (not the purple-leaning indigo). */
+      --accent: #4f8ef7;
+      --accent2: #6aa6ff;
+      --accent-rgb: 61, 130, 246;
+      --accent-grad: linear-gradient(135deg, #2563eb 0%, #4f8ef7 100%);
       --shadow: 0 8px 32px rgba(0, 0, 0, .55);
       --shadow-lg: 0 12px 40px rgba(0, 0, 0, .7);
       --hover-bg: rgba(255, 255, 255, .06);
@@ -376,11 +376,6 @@
       background: var(--accent-grad);
       color: #fff;
       box-shadow: 0 6px 18px rgba(var(--accent-rgb),.35);
-    }
-
-    /* Pale pink-white fill in dark mode needs dark text to stay readable. */
-    html[data-theme="dark"] .btn-primary {
-      color: #2a2026;
     }
 
     .btn-primary:hover {
