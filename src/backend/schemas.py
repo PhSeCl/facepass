@@ -84,6 +84,10 @@ class IdentityDetail(BaseModel):
     images: list[str]
 
 
+class PickDirectoryResponse(BaseModel):
+    path: str
+
+
 class DatasetEvalResponse(BaseModel):
     gallery_source: str
     metrics: EvalMetricsModel

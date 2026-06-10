@@ -40,6 +40,11 @@ from .dataset_import import (
     run_external_eval,
     run_external_eval_from_directory,
 )
+from .dir_picker import (
+    DirPickerError,
+    DirPickerTkMissingError,
+    pick_folder,
+)
 from .gallery import Gallery
 from .recognizer import Recognizer
 from .schemas import (
@@ -54,6 +59,7 @@ from .schemas import (
     IdentitiesResponse,
     IdentityDetail,
     IdentitySummary,
+    PickDirectoryResponse,
     RecognitionResultModel,
     RegisterResponse,
 )
@@ -339,6 +345,17 @@ def logo():
     if not logo_path.exists():
         raise HTTPException(status_code=404, detail={"message": "Logo not found"})
     return FileResponse(logo_path, media_type="image/png")
+
+
+@app.post("/pick-directory", response_model=PickDirectoryResponse)
+def pick_directory() -> PickDirectoryResponse:
+    try:
+        path = pick_folder()
+    except DirPickerTkMissingError as exc:
+        raise HTTPException(status_code=400, detail={"message": str(exc)}) from exc
+    except DirPickerError as exc:
+        raise HTTPException(status_code=400, detail={"message": str(exc)}) from exc
+    return PickDirectoryResponse(path=str(path))
 
 
 @app.get("/identity/{identity_id}/image")
