@@ -2,6 +2,18 @@
 REM ASCII-only on purpose: chcp/UTF-8 breaks on GBK consoles. This file is a thin
 REM bootstrap; all real logic (env detection, deps, CPU/GPU, launch) lives in the
 REM stdlib-only scripts\launcher.py so it can run under any interpreter found here.
+
+REM Prefer Windows Terminal: when launched from Explorer (a legacy conhost window)
+REM and wt.exe is available, relaunch this script inside Windows Terminal. WT_SESSION
+REM is set by Windows Terminal for its children, so this never loops. To opt out,
+REM set FACEPASS_NO_WT=1.
+if not defined WT_SESSION if not defined FACEPASS_NO_WT (
+    where wt >nul 2>nul && (
+        start "" wt.exe -d "%~dp0" cmd /c "%~nx0 %*"
+        exit /b
+    )
+)
+
 setlocal
 cd /d "%~dp0"
 
