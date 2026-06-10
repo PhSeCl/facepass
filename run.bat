@@ -1,15 +1,24 @@
 @echo off
+REM ASCII-only on purpose: chcp/UTF-8 breaks on GBK consoles. This file is a thin
+REM bootstrap; all real logic (env detection, deps, CPU/GPU, launch) lives in the
+REM stdlib-only scripts\launcher.py so it can run under any interpreter found here.
 setlocal
 cd /d "%~dp0"
 
-REM 1) Pick a launcher: prefer uv, fall back to system python.
-set "LAUNCHER="
-where uv >nul 2>nul && set "LAUNCHER=uv run python"
-if not defined LAUNCHER (
-    where python >nul 2>nul && set "LAUNCHER=python"
+set "VENV_PY=.venv\Scripts\python.exe"
+
+REM Find any Python able to run the stdlib-only launcher.
+set "BOOT="
+if exist "%VENV_PY%" set "BOOT=%VENV_PY%"
+if not defined BOOT (
+    where python >nul 2>nul && set "BOOT=python"
+)
+if not defined BOOT (
+    REM uv can fetch a standalone interpreter without touching the project env.
+    where uv >nul 2>nul && set "BOOT=uv run --no-project python"
 )
 
-if not defined LAUNCHER (
+if not defined BOOT (
     echo [ERROR] Neither uv nor python was found. Cannot start FacePass.
     echo Please install one of:
     echo   uv      https://docs.astral.sh/uv/
@@ -19,33 +28,16 @@ if not defined LAUNCHER (
     exit /b 1
 )
 
-if "%LAUNCHER%"=="python" (
-    echo [INFO] uv not found, falling back to system python.
-    echo        Installing uv is recommended for a consistent env ^(uv sync^).
-    echo.
-)
-
-REM 2) Missing config.toml means the backend cannot resolve a model path.
-if not exist "config.toml" (
-    echo [WARN] config.toml not found in this folder.
-    echo        The backend needs a model path to start: set [model].path in
-    echo        config.toml to your buffalo_l model directory.
-    echo.
-)
-
-echo Starting FacePass...
-echo.
-%LAUNCHER% scripts\run_dev.py
+%BOOT% scripts\launcher.py %*
 set "EXITCODE=%errorlevel%"
 
-REM 3) Pause on any non-zero exit so the error stays visible (no flashing window).
+REM Pause on any non-zero exit so the window does not flash and vanish.
 if not "%EXITCODE%"=="0" (
     echo.
     echo [ERROR] FacePass exited with code %EXITCODE%.
-    echo If a missing dependency was listed above, install it with uv sync or pip install.
-    echo Other common causes: config.toml missing [model].path, incomplete model dir.
     echo.
     pause
 )
 
 endlocal
+exit /b %EXITCODE%

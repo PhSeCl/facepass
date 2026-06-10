@@ -19,8 +19,9 @@ src/
 `-- frontend/
     `-- static/
         `-- index.html   # Web 前端（纯 HTML + JS），由后端 GET / 直接返回
-run.bat                  # Windows 双击启动入口（自动选 uv / python，缺依赖会提示而非闪退）
+run.bat                  # Windows 双击启动入口（瘦壳：找到一个 python 去跑 launcher.py）
 scripts/
+|-- launcher.py          # 启动向导：检测 uv/python/venv、查依赖、选 CPU/GPU、写 config、启动
 |-- run_dev.py           # 一键启动脚本（只启后端，前端由后端内置返回）
 |-- check_runtime.py     # 打印 onnxruntime provider 可用性，确认是否吃到 GPU
 |-- preannotate_test.py  # 为 dataset/test/images 生成预标注草稿
@@ -102,13 +103,25 @@ uv pip install "onnxruntime-gpu[cuda,cudnn]"
 
 ### 方式一：双击 `run.bat`（Windows 最简单）
 
-直接双击仓库根的 `run.bat` 即可启动。它做了健壮性处理，**不会再出现“终端一闪而过”**：
+直接双击仓库根的 `run.bat` 即可启动。`run.bat` 只是个瘦壳——找到一台机器上任意可用的
+python（优先 `.venv`，否则系统 `python`，再否则 `uv run --no-project python`）去运行
+`scripts/launcher.py`，由后者完成**首次启动向导**：
 
-- 优先用 `uv run python` 启动；**找不到 `uv` 时自动退回系统 `python`**；两者都没有才提示去安装。
-- 启动前预检依赖，**缺哪个库就按 pip 包名逐条打印**（并给出 `uv sync` / `pip install ...` 建议），而不是抛一堆 traceback。
-- 缺少 `config.toml`、或进程异常退出时，会**停下来显示错误码与常见原因**，方便排查。
+1. 静默检测有没有 `uv`、有没有 `python`、项目有没有 `.venv`。
+2. 选运行环境：
+   - 有 `uv` 且已有 `.venv` → 直接用它；有 `uv` 但没初始化 → 问是否 `uv sync`。
+   - 没走到上面 → 考察 python：检测到 `.venv` 问是否使用；否则问是否用全局 `python`；都不行则退出。
+3. **检查依赖是否完整（先不含 onnxruntime，因为还没问 CPU/GPU）**，缺啥列出来，问是否一键同步
+   （`uv sync` 或 `pip install -r requirements.txt`）。
+4. 问 **CPU 还是 GPU**：
+   - CPU → 用 `uv run python` / `.venv` python / 全局 `python` 启动；缺 CPU 版 onnxruntime 会补装。
+   - GPU → 一律用 `.venv\Scripts\python.exe` **直接启动**（绕开 `uv run` 回同步）；CUDA 不可用时
+     自动卸载/清理/重装 `onnxruntime-gpu[cuda,cudnn]` 并验证后再启动。
+5. 把选择写进 `config.toml` 的 `[runtime]`（`device` + `launcher`）。**以后双击直接按它启动**；
+   若该环境失效（缺 venv/依赖/CUDA）会自动回退重跑向导。想强制重选：`run.bat --reconfigure`。
 
-启动后浏览器打开 `http://127.0.0.1:8000` 即是 Web 界面。
+> 注：模型路径是否存在、模型校验等仍由后端启动时完成（不变）。进程异常退出时窗口会**停下来显示
+> 错误码**，不会一闪而过。启动后浏览器打开 `http://127.0.0.1:8000` 即是 Web 界面。
 
 ### 方式二：命令行启动
 
