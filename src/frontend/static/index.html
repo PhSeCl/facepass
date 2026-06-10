@@ -13,11 +13,12 @@
       --surface2: rgba(255, 255, 255, .4);
       --surface-strong: rgba(255, 255, 255, .72);
       --border: rgba(255, 255, 255, .65);
-      --border-soft: rgba(99, 102, 241, .18);
+      --border-soft: rgba(var(--accent-rgb),.18);
       --text: #1e2433;
       --text2: #6b7280;
       --accent: #6366f1;
       --accent2: #8b5cf6;
+      --accent-rgb: 99, 102, 241;
       --accent-grad: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
       --green: #16a34a;
       --red: #ef4444;
@@ -45,6 +46,11 @@
       --border-soft: rgba(255, 255, 255, .18);
       --text: #ededf0;
       --text2: #9a9aa3;
+      /* Dark mode accent: soft pink-white instead of indigo/violet. */
+      --accent: #f0d6e2;
+      --accent2: #f7e6ef;
+      --accent-rgb: 240, 214, 226;
+      --accent-grad: linear-gradient(135deg, #f9e7f0 0%, #e8cdda 100%);
       --shadow: 0 8px 32px rgba(0, 0, 0, .55);
       --shadow-lg: 0 12px 40px rgba(0, 0, 0, .7);
       --hover-bg: rgba(255, 255, 255, .06);
@@ -160,9 +166,9 @@
 
     .tab.active {
       background: var(--surface-strong);
-      border-color: rgba(99, 102, 241, .5);
+      border-color: rgba(var(--accent-rgb),.5);
       color: var(--accent);
-      box-shadow: 0 4px 14px rgba(99, 102, 241, .22);
+      box-shadow: 0 4px 14px rgba(var(--accent-rgb),.22);
     }
 
     .tab.active::after {
@@ -206,7 +212,7 @@
 
     /* Upload Zone */
     .upload-zone {
-      border: 2px dashed rgba(99, 102, 241, .35);
+      border: 2px dashed rgba(var(--accent-rgb),.35);
       border-radius: var(--radius);
       padding: 48px 24px;
       text-align: center;
@@ -223,7 +229,7 @@
 
     .upload-zone.drag {
       border-color: var(--accent);
-      background: rgba(99, 102, 241, .08);
+      background: rgba(var(--accent-rgb),.08);
     }
 
     .upload-zone.has-image {
@@ -328,7 +334,7 @@
 
     .form-input:focus {
       border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(99, 102, 241, .15);
+      box-shadow: 0 0 0 3px rgba(var(--accent-rgb),.15);
     }
 
     .form-input::placeholder {
@@ -369,12 +375,17 @@
     .btn-primary {
       background: var(--accent-grad);
       color: #fff;
-      box-shadow: 0 6px 18px rgba(99, 102, 241, .35);
+      box-shadow: 0 6px 18px rgba(var(--accent-rgb),.35);
+    }
+
+    /* Pale pink-white fill in dark mode needs dark text to stay readable. */
+    html[data-theme="dark"] .btn-primary {
+      color: #2a2026;
     }
 
     .btn-primary:hover {
       transform: translateY(-2px);
-      box-shadow: 0 10px 26px rgba(99, 102, 241, .45);
+      box-shadow: 0 10px 26px rgba(var(--accent-rgb),.45);
     }
 
     .btn-primary:disabled {
@@ -594,7 +605,7 @@
     }
 
     .identity-row:hover {
-      background: rgba(99, 102, 241, .1);
+      background: rgba(var(--accent-rgb),.1);
       transform: translateX(4px);
     }
 
