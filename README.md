@@ -1,6 +1,6 @@
 # FacePass - 本地人脸识别系统
 
-FacePass 是一个课程大作业项目，目标是在本地完成图片上传、人脸检测、身份识别与结果可视化。当前版本完成了模型端、后端、前端三层分离的最小闭环，并加入边界错误处理、日志和重试机制。前端已从早期的 Gradio 切换为更美观的纯 HTML + JS 页面，由后端 `GET /` 直接返回，整套服务单进程即可跑起来。
+FacePass 是一个课程大作业项目，目标是在本地完成图片上传、人脸检测、身份识别与结果可视化。当前版本完成了模型端、后端、前端三层分离的最小闭环，并加入边界错误处理、日志和重试机制。前端为纯 HTML + JS 页面（早期的 Gradio 界面已移除），由后端 `GET /` 直接返回，整套服务单进程即可跑起来。
 
 当前模型层支持两种实现：
 
@@ -17,9 +17,8 @@ src/
 |   `-- dataset_import.py # 解析上传的 test.zip / 本机数据集目录并跑外部评测
 |-- eval/                # 评测内核：CelebA / 单脸 / 端到端数据集、指标与出图，被脚本和后端复用
 `-- frontend/
-    |-- app.py           # 旧 Gradio 界面（已弃用，run_dev 不再启动）
     `-- static/
-        `-- index.html   # 当前 Web 前端，由后端 GET / 直接返回
+        `-- index.html   # Web 前端（纯 HTML + JS），由后端 GET / 直接返回
 run.bat                  # Windows 双击启动入口（自动选 uv / python，缺依赖会提示而非闪退）
 scripts/
 |-- run_dev.py           # 一键启动脚本（只启后端，前端由后端内置返回）
@@ -125,7 +124,7 @@ $env:FACEPASS_MODEL_PATH = "F:\InsightFace\models_cache\models\buffalo_l"
 uv run uvicorn src.backend.api:app --port 8000
 ```
 
-`run_dev.py` **只启动 FastAPI 后端**，Web 前端由 `GET http://127.0.0.1:8000/` 直接返回，无需再单独启动 Gradio。早期的 `src/frontend/app.py`（Gradio）已弃用。
+`run_dev.py` **只启动 FastAPI 后端**，Web 前端由 `GET http://127.0.0.1:8000/` 直接返回，单进程即可。早期的 Gradio 前端（`src/frontend/app.py`）已移除。
 
 如果路径校验通过，显式传入的模型目录会被写入项目根的 `config.toml`。TOML 里建议使用正斜杠：
 
@@ -354,7 +353,7 @@ GET http://127.0.0.1:8000/health
 - `inspect`：仅检查布局是否合法，返回 `{"has_registered": bool}`，表示该数据集是否自带注册集。
 - `run`：`gallery_choice` 表单字段选择用 `local`（仓库注册集）还是数据集自带注册集建库；返回评测指标、混淆对、漏检/误检列表，以及内联（base64 data URL）的混淆矩阵、检测、准确率三张图。
 
-这两个接口当前主要由脚本与历史 Gradio 页驱动；新的 HTML 前端尚未接入数据集评测页（计划中）。批量评测推荐直接走脚本 [`scripts/eval_end2end.py`](scripts/eval_end2end.py)（见下文“数据与评测”）。
+HTML 前端的「评估」标签页已接入这两个接口：支持上传 `test.zip`，或填入/用系统对话框选择本机数据集目录绝对路径（超大数据集免上传）。如需脚本化批量评测，也可直接走 [`scripts/eval_end2end.py`](scripts/eval_end2end.py)（见下文“数据与评测”）。
 
 ---
 
