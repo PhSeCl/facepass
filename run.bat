@@ -8,8 +8,10 @@ REM and wt.exe is available, relaunch this script inside Windows Terminal. WT_SE
 REM is set by Windows Terminal for its children, so this never loops. To opt out,
 REM set FACEPASS_NO_WT=1.
 if not defined WT_SESSION if not defined FACEPASS_NO_WT (
+    REM Note the trailing "." on the directory: %~dp0 ends with a backslash, and
+    REM "...\" would let wt treat \" as an escaped quote and swallow the rest.
     where wt >nul 2>nul && (
-        start "" wt.exe -d "%~dp0" cmd /c "%~nx0 %*"
+        start "" wt.exe -d "%~dp0." cmd /c "%~nx0 %*"
         exit /b
     )
 )
