@@ -49,7 +49,7 @@ config.example.toml      # 模型路径与阈值的示例配置
 
 ## 依赖
 
-> **普通使用者无需手动敲本节这些命令。** 直接双击仓库根的 `run.bat`，启动向导会自动检测/安装依赖、选 CPU/GPU 并启动（见 [运行 → 方式一](#方式一双击-runbatwindows-推荐)）。本节以及「方式二：命令行启动」里的命令，面向 CI、自动化脚本，或想手动控制环境、做调试的进阶用户。
+> **普通使用者无需手动执行本节命令。** 直接双击仓库根的 `run.bat`，启动向导会自动检测并安装依赖、选择 CPU/GPU 并启动（见 [运行 → 方式一](#方式一双击-runbatwindows-推荐)）。本节以及「方式二：命令行启动」中的命令，面向 CI、自动化脚本，或需要手动控制环境、进行调试的进阶用户。
 
 本项目使用 `uv` 管理依赖。默认依赖固定为 CPU 版 `onnxruntime==1.22.1`，这样 CPU-only 机器、测试环境和 CI 都能直接安装运行。较新的 `1.24.x` 在本项目的 CPython 3.10 Windows 环境没有可用 wheel。
 
@@ -105,33 +105,33 @@ uv pip install "onnxruntime-gpu[cuda,cudnn]"
 
 ### 方式一：双击 `run.bat`（Windows 推荐）
 
-**这是推荐的启动方式，全程无需在命令行手动输入任何 `uv` / `python` 命令。** 直接双击仓库根的 `run.bat` 即可启动。若机器装了 **Windows Terminal**（`wt`），双击会自动在 Windows Terminal 里重新打开，
+**这是推荐的启动方式，全程无需在命令行手动执行任何 `uv` / `python` 命令。** 直接双击仓库根的 `run.bat` 即可启动。若机器装了 **Windows Terminal**（`wt`），双击会自动在 Windows Terminal 里重新打开，
 并优先用 **PowerShell**（`pwsh` > `powershell`，都没有才退回 `cmd`），而不是旧的 cmd 窗口
 （已在终端里运行时不会重开；想关掉这个行为设环境变量 `FACEPASS_NO_WT=1`）。`run.bat` 只是个瘦壳——找到一台机器上任意可用的 python
 （优先 `.venv`，否则系统 `python`，再否则 `uv run --no-project python`）去运行
 `scripts/launcher.py`，由后者完成**首次启动向导**：
 
-1. 静默检测有没有 `uv`、有没有 `python`、项目有没有 `.venv`。
-2. 选运行环境：
-   - 有 `uv` 且已有 `.venv` → 直接用它；有 `uv` 但没初始化 → 问是否 `uv sync`。
-   - 没走到上面 → 考察 python：检测到 `.venv` 问是否使用；否则问是否用全局 `python`；都不行则退出。
-3. **检查依赖是否完整（先不含 onnxruntime，因为还没问 CPU/GPU）**，缺啥列出来，问是否一键同步
-   （`uv sync` 或 `pip install -r requirements.txt`）。
-4. 问 **CPU 还是 GPU**：
-   - CPU → 用 `uv run python` / `.venv` python / 全局 `python` 启动；缺 CPU 版 onnxruntime 会补装。
-   - GPU → 使用**独立的 `.venv-gpu`**（与项目 `.venv` 隔离，`uv` 永不回同步它），首次会建好并装上
-     `onnxruntime-gpu[cuda,cudnn]`、验证 CUDA 后启动；**之后复用、不再重装**（即使中途跑过 CPU）。
-     若该机器建不起 `.venv-gpu`（没 uv、python 缺 venv/pip 等），会说明情况让你三选一：装进当前环境 /
-     回退 CPU / 退出。
-5. 把选择写进 `config.toml` 的 `[runtime]`（`device` + `launcher`）。**以后双击直接按它启动**；
-   若该环境失效（缺 venv/依赖/CUDA）会自动回退重跑向导。想强制重选：`run.bat --reconfigure`。
+1. 检测当前机器上的 `uv`、`python` 与项目虚拟环境 `.venv`。
+2. 选择运行环境：优先复用 `uv` 管理的 `.venv`；尚未初始化时可选择执行 `uv sync`；无 `uv` 时改用项目
+   `.venv` 或全局 `python`，均不可用则退出。
+3. 校验运行依赖是否齐备，缺失时列出并可一键安装（`uv sync` 或 `pip install -r requirements.txt`）。
+   onnxruntime 在确认 CPU/GPU 后再单独处理。
+4. 选择 CPU 或 GPU：
+   - **CPU**：在所选环境中确保 CPU 版 onnxruntime 就绪后启动。
+   - **GPU**：使用独立的 `.venv-gpu`，与项目 `.venv` 隔离，不受 `uv` 回同步影响。首次会创建该环境、
+     安装 `onnxruntime-gpu[cuda,cudnn]` 并验证 CUDA，此后复用、不再重装；即便期间以 CPU 模式运行过也不受影响。
+     若无法创建 `.venv-gpu`（缺少 uv，或 python 不含 venv/pip 等），会说明原因并提供三种处理方式：
+     装入当前环境、回退 CPU、退出。
+5. 将选择写入 `config.toml` 的 `[runtime]` 表（`device` 与 `launcher`），此后双击直接据此启动；
+   若该环境失效（缺少虚拟环境、依赖或 CUDA）会自动回退并重新运行向导。如需强制重选，执行
+   `run.bat --reconfigure`。
 
 > 注：模型路径是否存在、模型校验等仍由后端启动时完成（不变）。进程异常退出时窗口会**停下来显示
 > 错误码**，不会一闪而过。启动后浏览器打开 `http://127.0.0.1:8000` 即是 Web 界面。
 
 ### 方式二：命令行启动（进阶 / 调试用）
 
-> 普通使用者用方式一双击 `run.bat` 即可，无需手敲 `uv run` / `python`。下列命令面向 CI、自动化脚本，或想手动控制环境、做调试的进阶用户。
+> 普通使用者用方式一双击 `run.bat` 即可，无需手动执行 `uv run` / `python`。下列命令面向 CI、自动化脚本，或需要手动控制环境、进行调试的进阶用户。
 
 ```powershell
 # 一键启动（只启后端，Web 前端由后端 GET / 直接返回）
