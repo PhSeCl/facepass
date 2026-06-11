@@ -49,6 +49,8 @@ config.example.toml      # 模型路径与阈值的示例配置
 
 ## 依赖
 
+> **普通使用者无需手动敲本节这些命令。** 直接双击仓库根的 `run.bat`，启动向导会自动检测/安装依赖、选 CPU/GPU 并启动（见 [运行 → 方式一](#方式一双击-runbatwindows-推荐)）。本节以及「方式二：命令行启动」里的命令，面向 CI、自动化脚本，或想手动控制环境、做调试的进阶用户。
+
 本项目使用 `uv` 管理依赖。默认依赖固定为 CPU 版 `onnxruntime==1.22.1`，这样 CPU-only 机器、测试环境和 CI 都能直接安装运行。较新的 `1.24.x` 在本项目的 CPython 3.10 Windows 环境没有可用 wheel。
 
 ```powershell
@@ -101,9 +103,9 @@ uv pip install "onnxruntime-gpu[cuda,cudnn]"
 2. 在项目根的 `config.toml` 里写好 `[model].path`（见下文），或在启动时用 `--model-path` 显式传入。
 3. 准备注册集：将 `p01..p20` 的注册照放到 `dataset/registered/p01/` 等目录。
 
-### 方式一：双击 `run.bat`（Windows 最简单）
+### 方式一：双击 `run.bat`（Windows 推荐）
 
-直接双击仓库根的 `run.bat` 即可启动。若机器装了 **Windows Terminal**（`wt`），双击会自动在 Windows Terminal 里重新打开，
+**这是推荐的启动方式，全程无需在命令行手动输入任何 `uv` / `python` 命令。** 直接双击仓库根的 `run.bat` 即可启动。若机器装了 **Windows Terminal**（`wt`），双击会自动在 Windows Terminal 里重新打开，
 并优先用 **PowerShell**（`pwsh` > `powershell`，都没有才退回 `cmd`），而不是旧的 cmd 窗口
 （已在终端里运行时不会重开；想关掉这个行为设环境变量 `FACEPASS_NO_WT=1`）。`run.bat` 只是个瘦壳——找到一台机器上任意可用的 python
 （优先 `.venv`，否则系统 `python`，再否则 `uv run --no-project python`）去运行
@@ -127,7 +129,9 @@ uv pip install "onnxruntime-gpu[cuda,cudnn]"
 > 注：模型路径是否存在、模型校验等仍由后端启动时完成（不变）。进程异常退出时窗口会**停下来显示
 > 错误码**，不会一闪而过。启动后浏览器打开 `http://127.0.0.1:8000` 即是 Web 界面。
 
-### 方式二：命令行启动
+### 方式二：命令行启动（进阶 / 调试用）
+
+> 普通使用者用方式一双击 `run.bat` 即可，无需手敲 `uv run` / `python`。下列命令面向 CI、自动化脚本，或想手动控制环境、做调试的进阶用户。
 
 ```powershell
 # 一键启动（只启后端，Web 前端由后端 GET / 直接返回）
