@@ -85,8 +85,23 @@ def test_resolve_launch_command_tokens(monkeypatch) -> None:
     assert launcher.resolve_launch_command("venv") == [str(launcher.VENV_PY)]
     assert launcher.resolve_launch_command("venv-gpu") == [str(launcher.GPU_VENV_PY)]
     monkeypatch.setattr(launcher.shutil, "which", lambda name: "C:/py/python.exe")
+    monkeypatch.setattr(launcher, "_python_works", lambda interp: True)
     assert launcher.resolve_launch_command("global") == ["C:/py/python.exe"]
     assert launcher.resolve_launch_command("bogus") is None
+
+
+def test_find_global_python_rejects_broken_interpreter(monkeypatch) -> None:
+    # `python` resolves but does not actually run (e.g. the Store stub).
+    monkeypatch.setattr(launcher.shutil, "which", lambda name: f"C:/{name}.exe")
+    monkeypatch.setattr(launcher, "_python_works", lambda interp: False)
+    assert launcher.find_global_python() is None
+
+
+def test_find_global_python_falls_back_to_py_launcher(monkeypatch) -> None:
+    monkeypatch.setattr(launcher.shutil, "which", lambda name: f"C:/{name}.exe")
+    # python.exe is a non-working stub; only the `py` launcher runs.
+    monkeypatch.setattr(launcher, "_python_works", lambda interp: interp == "py")
+    assert launcher.find_global_python() == "py"
 
 
 def test_runtime_is_valid_accepts_dedicated_gpu_venv(monkeypatch) -> None:

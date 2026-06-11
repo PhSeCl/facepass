@@ -123,6 +123,33 @@ def load_runtime() -> dict[str, str] | None:
 # --------------------------------------------------------------------------- #
 # Interpreter resolution.
 # --------------------------------------------------------------------------- #
+def _python_works(interpreter: str) -> bool:
+    """True if `interpreter` actually runs Python.
+
+    A real run rejects the Microsoft Store python.exe stub (it exits non-zero
+    with a "go install from the Store" message) and any broken shim, which a
+    bare `shutil.which` check would wrongly accept.
+    """
+    try:
+        return subprocess.run([interpreter, "-c", "import sys"], capture_output=True).returncode == 0
+    except OSError:
+        return False
+
+
+def find_global_python() -> str | None:
+    """A working system Python command, or None.
+
+    Prefers `python`; falls back to the `py` launcher (python.org installs may
+    add only `py` to PATH). The Store stub is filtered out by `_python_works`.
+    """
+    candidate = shutil.which("python")
+    if candidate and _python_works(candidate):
+        return candidate
+    if shutil.which("py") and _python_works("py"):
+        return "py"
+    return None
+
+
 def resolve_launch_command(launcher: str) -> list[str] | None:
     """Map a launcher token to the command used to start run_dev.py."""
     if launcher == "uv":
@@ -132,7 +159,7 @@ def resolve_launch_command(launcher: str) -> list[str] | None:
     if launcher == "venv-gpu":
         return [str(GPU_VENV_PY)]
     if launcher == "global":
-        python = shutil.which("python") or (sys.executable if sys.executable else None)
+        python = find_global_python() or (sys.executable or None)
         return [python] if python else None
     return None
 
@@ -148,7 +175,7 @@ def _check_interpreter(launcher: str) -> str | None:
     if launcher == "venv-gpu":
         return str(GPU_VENV_PY) if GPU_VENV_PY.exists() else None
     if launcher == "global":
-        return shutil.which("python")
+        return find_global_python()
     return None
 
 
@@ -396,7 +423,7 @@ def choose_environment(has_uv: bool) -> tuple[str, str] | None:
         if ask_yes_no("是否使用这个虚拟环境?"):
             return "venv", str(VENV_PY)
 
-    global_python = shutil.which("python")
+    global_python = find_global_python()
     if global_python:
         if ask_yes_no("是否使用全局 python?", default=False):
             return "global", global_python
@@ -520,4 +547,8 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except KeyboardInterrupt:
+        print("\n已取消。")
+        raise SystemExit(0)

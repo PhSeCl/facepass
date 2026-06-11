@@ -28,11 +28,18 @@ cd /d "%~dp0"
 
 set "VENV_PY=.venv\Scripts\python.exe"
 
-REM Find any Python able to run the stdlib-only launcher.
+REM Find any Python able to run the stdlib-only launcher. Probe by actually
+REM running "-c import sys" instead of bare "where": that rejects the Microsoft
+REM Store python.exe stub (exits non-zero) and any broken shim, and confirms the
+REM interpreter really works.
 set "BOOT="
 if exist "%VENV_PY%" set "BOOT=%VENV_PY%"
 if not defined BOOT (
-    where python >nul 2>nul && set "BOOT=python"
+    python -c "import sys" >nul 2>nul && set "BOOT=python"
+)
+if not defined BOOT (
+    REM python.org installs may add only the "py" launcher to PATH.
+    py -c "import sys" >nul 2>nul && set "BOOT=py"
 )
 if not defined BOOT (
     REM uv can fetch a standalone interpreter without touching the project env.
