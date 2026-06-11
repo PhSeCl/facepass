@@ -31,10 +31,12 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import traceback
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = REPO_ROOT / "config.toml"
+ISSUE_URL = "https://github.com/PhSeCl/facepass/issues"
 REQUIREMENTS = REPO_ROOT / "requirements.txt"
 RUN_DEV = REPO_ROOT / "scripts" / "run_dev.py"
 VENV_PY = REPO_ROOT / ".venv" / "Scripts" / "python.exe"
@@ -552,9 +554,45 @@ def main(argv: list[str] | None = None) -> int:
     return launch(launcher, device)
 
 
+def _report_unexpected_error() -> None:
+    """Last-resort handler: show the traceback and where to report it.
+
+    We constrain the supported toolchain (uv / python / Windows Terminal), so a
+    machine outside those assumptions may still hit something we did not foresee.
+    Rather than flashing a raw traceback and vanishing, explain what to do.
+    """
+    print()
+    print("=" * 64)
+    print("  FacePass 启动器遇到未预期的错误")
+    print("=" * 64)
+    # Send the traceback to stdout too, so it stays in order with the guidance
+    # below instead of interleaving via the separate stderr stream.
+    traceback.print_exc(file=sys.stdout)
+    print()
+    print("这很可能是我们尚未覆盖到的环境问题。给你添麻烦了——")
+    print("麻烦把上面这段完整报错复制下来，到项目主页提交 issue：")
+    print(f"  {ISSUE_URL}")
+    print("附上以下信息能帮我们更快定位：")
+    print("  - Windows 版本；是否安装 uv / python（及版本）")
+    print("  - 本次选择的 CPU 还是 GPU")
+    print("  - 复制的完整报错文本")
+    print()
+
+
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except KeyboardInterrupt:
         print("\n已取消。")
         raise SystemExit(0)
+    except SystemExit:
+        # Normal exit path (including argparse errors, which already printed a
+        # usage message); let it through untouched.
+        raise
+    except BaseException:
+        _report_unexpected_error()
+        try:
+            input("按回车键退出...")
+        except (EOFError, KeyboardInterrupt):
+            pass
+        raise SystemExit(1)

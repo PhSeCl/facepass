@@ -52,6 +52,9 @@ if not defined BOOT (
     echo   uv      https://docs.astral.sh/uv/
     echo   Python  https://www.python.org/
     echo.
+    echo If you still cannot start it, please open an issue:
+    echo   https://github.com/PhSeCl/facepass/issues
+    echo.
     pause
     exit /b 1
 )

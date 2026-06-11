@@ -144,3 +144,13 @@ def test_runtime_is_valid_rejects_uv_without_uv(monkeypatch) -> None:
 def test_runtime_is_valid_rejects_bad_tokens() -> None:
     assert launcher.runtime_is_valid({"launcher": "nope", "device": "cpu"}, has_uv=True) is False
     assert launcher.runtime_is_valid({"launcher": "venv", "device": "tpu"}, has_uv=True) is False
+
+
+def test_report_unexpected_error_points_to_issue_tracker(capsys) -> None:
+    try:
+        raise RuntimeError("boom-xyz")
+    except RuntimeError:
+        launcher._report_unexpected_error()
+    out = capsys.readouterr().out
+    assert launcher.ISSUE_URL in out  # tells the user where to report
+    assert "boom-xyz" in out  # includes the actual traceback
