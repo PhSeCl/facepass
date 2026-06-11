@@ -9,7 +9,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -370,6 +370,16 @@ def logo():
     if not logo_path.exists():
         raise HTTPException(status_code=404, detail={"message": "Logo not found"})
     return FileResponse(logo_path, media_type="image/png")
+
+
+@app.get("/favicon.ico")
+def favicon():
+    # Browsers auto-request /favicon.ico; without a route it 404s and logs a
+    # spurious WARNING on every page load. Reuse the logo, or answer 204.
+    logo_path = Path(__file__).resolve().parents[2] / "design" / "facepass.png"
+    if logo_path.exists():
+        return FileResponse(logo_path, media_type="image/png")
+    return Response(status_code=204)
 
 
 @app.get("/identity/{identity_id}/image")

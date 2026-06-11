@@ -5,6 +5,7 @@ __pycache__/
 
 # Virtual environment
 .venv/
+.venv-gpu/
 
 # Model weights and generated galleries
 models/
