@@ -40,8 +40,9 @@ CONFIG_PATH = REPO_ROOT / "config.toml"
 ISSUE_URL = "https://github.com/PhSeCl/facepass/issues"
 REQUIREMENTS = REPO_ROOT / "requirements.txt"
 RUN_DEV = REPO_ROOT / "scripts" / "run_dev.py"
-VENV_PY = REPO_ROOT / ".venv" / "Scripts" / "python.exe"
-ORT_PACKAGE_DIR = REPO_ROOT / ".venv" / "Lib" / "site-packages" / "onnxruntime"
+VENV = REPO_ROOT / ".venv"
+VENV_PY = VENV / "Scripts" / "python.exe"
+ORT_PACKAGE_DIR = VENV / "Lib" / "site-packages" / "onnxruntime"
 
 # Dedicated GPU virtualenv: kept separate from the project .venv so that
 # `uv run`/`uv sync` (which re-sync the CPU-pinned onnxruntime) never clobber the
@@ -413,6 +414,19 @@ def _gpu_fallback_choice(has_uv: bool, base_launcher: str, base_interpreter: str
 # --------------------------------------------------------------------------- #
 # Wizard.
 # --------------------------------------------------------------------------- #
+def create_project_venv(base_interpreter: str) -> bool:
+    """Create the project .venv with `base_interpreter -m venv`.
+
+    Lets a pip-only user (no uv) get a clean dedicated environment instead of
+    installing the heavy deps into their global interpreter.
+    """
+    if VENV_PY.exists():
+        return True
+    print(f"创建项目虚拟环境 {VENV.name} ...")
+    rc = subprocess.run([base_interpreter, "-m", "venv", str(VENV)], cwd=str(REPO_ROOT)).returncode
+    return rc == 0 and VENV_PY.exists()
+
+
 def choose_environment(has_uv: bool) -> tuple[str, str] | None:
     """Return (launcher_token, interpreter_path) or None if no env can serve."""
     # ---- uv examination ----
@@ -435,9 +449,17 @@ def choose_environment(has_uv: bool) -> tuple[str, str] | None:
 
     global_python = find_global_python()
     if global_python:
-        if ask_yes_no("是否使用全局 python?", default=False):
+        # No project .venv yet. Prefer building a dedicated one (like uv would)
+        # over installing the heavy deps into the global interpreter.
+        print("[INFO] 未检测到项目虚拟环境 .venv。")
+        if ask_yes_no("是否创建项目专用虚拟环境 .venv (推荐，不污染全局 python)?"):
+            if create_project_venv(global_python):
+                print("[OK] 已创建 .venv。")
+                return "venv", str(VENV_PY)
+            print("[警告] 创建 .venv 失败，可改用全局 python。")
+        if ask_yes_no("是否改用全局 python（依赖会装到系统环境）?", default=False):
             return "global", global_python
-        print("[退出] 已选择不使用全局 python。")
+        print("[退出] 已取消。")
         return None
 
     print("[错误] 未找到可用的 uv / python，无法提供服务。")

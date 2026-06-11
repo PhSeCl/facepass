@@ -104,6 +104,31 @@ def test_find_global_python_falls_back_to_py_launcher(monkeypatch) -> None:
     assert launcher.find_global_python() == "py"
 
 
+def test_create_project_venv_invokes_venv_module(tmp_path, monkeypatch) -> None:
+    venv_dir = tmp_path / ".venv"
+    venv_py = venv_dir / "Scripts" / "python.exe"
+    monkeypatch.setattr(launcher, "VENV", venv_dir)
+    monkeypatch.setattr(launcher, "VENV_PY", venv_py)
+
+    captured: dict[str, list[str]] = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        # Simulate `python -m venv` producing the interpreter.
+        venv_py.parent.mkdir(parents=True, exist_ok=True)
+        venv_py.write_text("", encoding="utf-8")
+
+        class _R:
+            returncode = 0
+
+        return _R()
+
+    monkeypatch.setattr(launcher.subprocess, "run", fake_run)
+
+    assert launcher.create_project_venv("C:/py/python.exe") is True
+    assert captured["cmd"][:3] == ["C:/py/python.exe", "-m", "venv"]
+
+
 def test_runtime_is_valid_accepts_dedicated_gpu_venv(monkeypatch) -> None:
     monkeypatch.setattr(launcher, "_check_interpreter", lambda token: "GPUPY")
     monkeypatch.setattr(launcher, "missing_packages", lambda interp: [])
