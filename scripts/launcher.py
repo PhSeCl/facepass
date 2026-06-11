@@ -25,6 +25,7 @@ every other section.
 from __future__ import annotations
 
 import argparse
+import functools
 import importlib.util
 import os
 import shutil
@@ -57,10 +58,13 @@ GPU_ONNXRUNTIME = "onnxruntime-gpu[cuda,cudnn]"
 # Required modules (reuse run_dev's list, minus onnxruntime which is decided
 # only after the CPU/GPU question).
 # --------------------------------------------------------------------------- #
+@functools.lru_cache(maxsize=1)
 def required_modules() -> dict[str, str]:
+    # Cached: read once per process. Called several times per launch (wizard,
+    # runtime_is_valid, GPU setup) and each call would otherwise re-exec run_dev.
     spec = importlib.util.spec_from_file_location("facepass_run_dev", RUN_DEV)
-    module = importlib.util.module_from_spec(spec)
     assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return {name: pkg for name, pkg in module.REQUIRED_MODULES.items() if name != "onnxruntime"}
 
@@ -125,6 +129,16 @@ def load_runtime() -> dict[str, str] | None:
 # --------------------------------------------------------------------------- #
 # Interpreter resolution.
 # --------------------------------------------------------------------------- #
+def _py_exits_zero(interpreter: str, code: str) -> bool:
+    """Run a one-liner in `interpreter`; True iff it exits 0 (False on OSError)."""
+    try:
+        return subprocess.run(
+            [interpreter, "-c", code], capture_output=True, cwd=str(REPO_ROOT)
+        ).returncode == 0
+    except OSError:
+        return False
+
+
 def _python_works(interpreter: str) -> bool:
     """True if `interpreter` actually runs Python.
 
@@ -132,10 +146,7 @@ def _python_works(interpreter: str) -> bool:
     with a "go install from the Store" message) and any broken shim, which a
     bare `shutil.which` check would wrongly accept.
     """
-    try:
-        return subprocess.run([interpreter, "-c", "import sys"], capture_output=True).returncode == 0
-    except OSError:
-        return False
+    return _py_exits_zero(interpreter, "import sys")
 
 
 def find_global_python() -> str | None:
@@ -208,15 +219,10 @@ def missing_packages(interpreter: str) -> list[str] | None:
 
 
 def _probe_import(interpreter: str, module: str) -> bool:
-    try:
-        proc = subprocess.run(
-            [interpreter, "-c", f"import importlib.util as u,sys; sys.exit(0 if u.find_spec({module!r}) else 1)"],
-            capture_output=True,
-            cwd=str(REPO_ROOT),
-        )
-    except OSError:
-        return False
-    return proc.returncode == 0
+    return _py_exits_zero(
+        interpreter,
+        f"import importlib.util as u,sys; sys.exit(0 if u.find_spec({module!r}) else 1)",
+    )
 
 
 def has_onnxruntime(interpreter: str) -> bool:
@@ -224,15 +230,11 @@ def has_onnxruntime(interpreter: str) -> bool:
 
 
 def cuda_available(interpreter: str) -> bool:
-    code = (
+    return _py_exits_zero(
+        interpreter,
         "import onnxruntime as o,sys; "
-        "sys.exit(0 if 'CUDAExecutionProvider' in o.get_available_providers() else 1)"
+        "sys.exit(0 if 'CUDAExecutionProvider' in o.get_available_providers() else 1)",
     )
-    try:
-        proc = subprocess.run([interpreter, "-c", code], capture_output=True, cwd=str(REPO_ROOT))
-    except OSError:
-        return False
-    return proc.returncode == 0
 
 
 # --------------------------------------------------------------------------- #
