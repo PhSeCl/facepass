@@ -146,11 +146,25 @@ def test_runtime_is_valid_rejects_bad_tokens() -> None:
     assert launcher.runtime_is_valid({"launcher": "venv", "device": "tpu"}, has_uv=True) is False
 
 
-def test_report_unexpected_error_points_to_issue_tracker(capsys) -> None:
+def test_report_unexpected_error_points_to_issue_tracker(capsys, monkeypatch) -> None:
+    # Decline the export prompt so the test does not write a file.
+    monkeypatch.setattr(launcher, "ask_yes_no", lambda *a, **k: False)
     try:
         raise RuntimeError("boom-xyz")
     except RuntimeError:
         launcher._report_unexpected_error()
     out = capsys.readouterr().out
+    assert "启动失败" in out
     assert launcher.ISSUE_URL in out  # tells the user where to report
     assert "boom-xyz" in out  # includes the actual traceback
+
+
+def test_write_crash_report_creates_file(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(launcher, "REPO_ROOT", tmp_path)
+    path = launcher._write_crash_report("Traceback: boom-detail")
+    assert path is not None
+    assert path.parent == tmp_path
+    assert path.suffix == ".log"
+    text = path.read_text(encoding="utf-8")
+    assert "boom-detail" in text
+    assert launcher.ISSUE_URL in text  # report header carries the feedback link

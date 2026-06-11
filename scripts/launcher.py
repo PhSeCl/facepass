@@ -554,28 +554,60 @@ def main(argv: list[str] | None = None) -> int:
     return launch(launcher, device)
 
 
+def _write_crash_report(detail: str) -> Path | None:
+    """Write the error detail (with environment info) to a .log file in the repo.
+
+    `.log` is git-ignored, so the report never pollutes version control. Returns
+    the path on success, or None if it could not be written.
+    """
+    from datetime import datetime
+
+    name = datetime.now().strftime("facepass_crash_%Y%m%d_%H%M%S.log")
+    path = REPO_ROOT / name
+    header = (
+        "FacePass 启动器错误报告\n"
+        f"生成时间: {datetime.now().isoformat(timespec='seconds')}\n"
+        f"Python: {sys.version}\n"
+        f"平台: {sys.platform}\n"
+        f"命令行参数: {sys.argv}\n"
+        f"反馈地址: {ISSUE_URL}\n"
+        + "-" * 64
+        + "\n"
+    )
+    try:
+        path.write_text(header + detail, encoding="utf-8")
+        return path
+    except OSError:
+        return None
+
+
 def _report_unexpected_error() -> None:
-    """Last-resort handler: show the traceback and where to report it.
+    """Last-resort handler: show the error and where to report it.
 
     We constrain the supported toolchain (uv / python / Windows Terminal), so a
     machine outside those assumptions may still hit something we did not foresee.
-    Rather than flashing a raw traceback and vanishing, explain what to do.
+    Rather than flashing a raw traceback and vanishing, explain what to do and
+    offer to export the report to a file.
     """
+    detail = traceback.format_exc()
     print()
     print("=" * 64)
-    print("  FacePass 启动器遇到未预期的错误")
+    print("  遇到非预期致命错误，启动失败")
     print("=" * 64)
-    # Send the traceback to stdout too, so it stays in order with the guidance
-    # below instead of interleaving via the separate stderr stream.
-    traceback.print_exc(file=sys.stdout)
-    print()
-    print("这很可能是我们尚未覆盖到的环境问题。给你添麻烦了——")
-    print("麻烦把上面这段完整报错复制下来，到项目主页提交 issue：")
+    print(detail)
+    print("您可以附带以上报错信息向项目提交反馈：")
     print(f"  {ISSUE_URL}")
-    print("附上以下信息能帮我们更快定位：")
-    print("  - Windows 版本；是否安装 uv / python（及版本）")
-    print("  - 本次选择的 CPU 还是 GPU")
-    print("  - 复制的完整报错文本")
+    print()
+    try:
+        if ask_yes_no("是否将报错信息导出为文件?", default=True):
+            path = _write_crash_report(detail)
+            if path is not None:
+                print(f"报错信息已导出至：{path}")
+            else:
+                print("[警告] 导出报错文件失败（可能无写入权限）。")
+    except BaseException:
+        # The reporter must never raise; ignore any failure during export.
+        pass
     print()
 
 
