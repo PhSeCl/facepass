@@ -120,6 +120,9 @@ uv pip install "onnxruntime-gpu[cuda,cudnn]"
    - **CPU**：在所选环境中确保 CPU 版 onnxruntime 就绪后启动。
    - **GPU**：使用独立的 `.venv-gpu`，与项目 `.venv` 隔离，不受 `uv` 回同步影响。首次会创建该环境、
      安装 `onnxruntime-gpu[cuda,cudnn]` 并验证 CUDA，此后复用、不再重装；即便期间以 CPU 模式运行过也不受影响。
+     **首次选择 GPU 会额外下载 CUDA / cuDNN 等运行库，体积约 2.4 GB**（`.venv-gpu` 总大小约 2.8 GB，
+     远大于 CPU 版 `.venv` 的约 0.5 GB）；之后复用、不再重复下载。磁盘紧张时可只用 CPU，或参见
+     [清理 GPU 环境](#清理-gpu-环境释放磁盘)。
      若无法创建 `.venv-gpu`（缺少 uv，或 python 不含 venv/pip 等），会说明原因并提供三种处理方式：
      装入当前环境、回退 CPU、退出。
 5. 将选择写入 `config.toml` 的 `[runtime]` 表（`device` 与 `launcher`），此后双击直接据此启动；
@@ -196,6 +199,25 @@ uv run python scripts/check_runtime.py --model-path F:\InsightFace\models_cache\
 ```powershell
 curl http://127.0.0.1:8000/health
 ```
+
+### 清理 GPU 环境（释放磁盘）
+
+GPU 模式使用的独立 `.venv-gpu` 体积较大（约 2.8 GB，主要是 CUDA / cuDNN 运行库）。如果你之前用过
+GPU、之后打算只用 CPU，直接删掉这个目录即可回收空间——它与项目 `.venv` 完全隔离，删除不会影响 CPU 运行：
+
+```powershell
+Remove-Item -Recurse -Force .venv-gpu
+```
+
+删除后请把 `config.toml` 里 `[runtime]` 的 `device` 改回 CPU，最稳妥的做法是重跑一次向导让它重新写入：
+
+```powershell
+.\run.bat --reconfigure
+```
+
+> 说明：`run.bat --reconfigure` 会忽略已保存的 `[runtime]` 配置、重新询问环境与 CPU/GPU 并覆盖写回。
+> 即使忘了改 `config.toml`，下次启动时向导也会发现 `.venv-gpu` 已不存在、自动回退重新选择，不会报错。
+> 之后若又想用 GPU，再次选择 GPU 会重新创建 `.venv-gpu`（需重新下载约 2.4 GB）。
 
 ## API
 

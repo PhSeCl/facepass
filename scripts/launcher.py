@@ -253,6 +253,12 @@ def ask_yes_no(question: str, default: bool = True) -> bool:
 
 
 def ask_device() -> str:
+    # Only show the size warning when a GPU env is not already prepared, so the
+    # message reflects what the choice actually costs this time.
+    if not GPU_VENV_PY.exists():
+        print()
+        print("提示：首次选择 GPU 会创建独立的 .venv-gpu，并下载 CUDA / cuDNN 等")
+        print("      运行库，约 2.4 GB（之后复用、不再重复下载）。CPU 模式无此开销。")
     while True:
         try:
             answer = input("使用 CPU 还是 GPU 运行? [C/g] ").strip().lower()
