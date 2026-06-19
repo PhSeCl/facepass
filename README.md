@@ -783,8 +783,8 @@ uv run pytest tests -q
 
 ## 小组成员
 
-| 姓名 | 学号 | 分工 |
-| --- | --- | --- |
-|  |  |  |
-|  |  |  |
-|  |  |  |
+本项目由以下成员共同完成：
+
+- [@PhSeCl](https://github.com/PhSeCl)
+- [@Antii-claude](https://github.com/Antii-claude)
+- [@Anony-mous-210](https://github.com/Anony-mous-210)
