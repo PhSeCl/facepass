@@ -13,17 +13,15 @@ image/image_type/faces[].identity_id+bbox）的版本。本脚本由前者生成
 import argparse
 import json
 from pathlib import Path
-import sys
-
-
-ROOT_DIR = Path(__file__).resolve().parents[1]
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
+import re
 
 from PIL import Image
 
-from src.eval.end2end_dataset import IDENTITY_PATTERN
 
+# 合法 identity：p 开头 + 两位数字，或 unknown。与 src/eval 加载器的校验口径一致；
+# 这里内联而非 import，是为了让脚本只依赖 Pillow + 标准库，避免在仅装了转换依赖的
+# CI 环境里因 src.eval 包链（numpy 等）导入失败。
+IDENTITY_PATTERN = re.compile(r"p\d{2}|unknown")
 
 # annotations.jsonl 中 image 字段相对 dataset 根目录的固定前缀。
 IMAGE_PREFIX = "test/images"
