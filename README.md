@@ -59,11 +59,11 @@ threshold = 0.30   # 余弦相似度阈值，低于此值判为 unknown
 
 ### 4. 启动并打开浏览器
 
+**双击仓库根的 `run.bat`** 即可一键启动（首次会有向导自动装依赖、选 CPU/GPU，无需手敲命令）。非 Windows 或需要命令行时，也可以用：
+
 ```powershell
 uv run python scripts/run_dev.py
 ```
-
-Windows 用户也可以直接**双击仓库根的 `run.bat`** 一键启动（首次会有向导自动装依赖、选 CPU/GPU，无需手敲命令）。
 
 启动后访问 <http://127.0.0.1:8000>，在「人脸识别」页上传图片即可看到检测框与识别结果。注册集 `dataset/registered/`（p01–p20）已随仓库提供，启动即建库。
 
