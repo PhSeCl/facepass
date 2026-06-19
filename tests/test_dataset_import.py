@@ -158,6 +158,35 @@ def test_locate_external_dataset_directory_accepts_dataset_root_with_nested_test
     assert result.registered_dir == root / "registered"
 
 
+def test_locate_external_dataset_directory_prefers_json_when_both_annotations_present(tmp_path: Path) -> None:
+    test_root = tmp_path / "test"
+    (test_root / "images").mkdir(parents=True)
+    (test_root / "annotation.json").write_text("{}", encoding="utf-8")
+    (test_root / "annotations.jsonl").write_text('{"image":"group_01.jpg","faces":[]}\n', encoding="utf-8")
+
+    result = locate_external_dataset_directory(test_root)
+
+    assert result.annotation_path == test_root / "annotation.json"
+    assert result.annotation_format == "json"
+
+
+def test_extract_dataset_archive_prefers_json_when_both_annotations_present(tmp_path: Path) -> None:
+    archive_path = tmp_path / "both.zip"
+    _write_archive(
+        archive_path,
+        {
+            "images/p01_t01.jpg": b"fake-image",
+            "annotation.json": b"{}",
+            "annotations.jsonl": b'{"image":"p01_t01.jpg","faces":[]}\n',
+        },
+    )
+
+    result = extract_dataset_archive(archive_path)
+
+    assert result.annotation_path.name == "annotation.json"
+    assert result.annotation_format == "json"
+
+
 def test_locate_external_dataset_directory_rejects_parent_directory_without_direct_test_layout(tmp_path: Path) -> None:
     root = tmp_path / "datasets"
     test_root = root / "nested" / "test"
