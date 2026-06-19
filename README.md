@@ -519,7 +519,7 @@ print(len(identities["identities"]))  # → 已注册身份数
 - `bbox` 固定为 `[x, y, w, h]`。
 - `identity` 只能写 `p01`..`p20` 或 `unknown`。
 - `score` 是预标注阶段保留的相似度参考值；评测会忽略它，但人工核对时应该保留。
-- 现有加载器同时兼容 `.json` 和旧 `.jsonl`，但当前仓库标准是 `annotation.json`，后续不要再把 `dataset/test` 主标注写回 JSONL。
+- 现有加载器同时兼容 `.json` 和 `.jsonl`。**人工维护的主文件是 `annotation.json`（分组、可读）；作业规范要求的 `annotations.jsonl` 由 `scripts/json2jsonl.py` 从它自动生成，不要手改 jsonl。** 转换时会把字段重命名为规范的 `image` / `image_type` / `faces[].identity_id`，并按图像真实尺寸把越界 bbox 钳制到 `[0, 0, W, H]` 内。
 
 ### 向 `dataset/test` 添加图片的必做流程
 
@@ -548,7 +548,19 @@ uv run python scripts/preannotate_test.py `
 4. 预标注只是草稿，必须人工检查后再提交。
    - 重点看低分项、单人照多脸、多人照漏脸。
    - 当前规则里，低于 `0.25` 的草稿身份会直接写成 `unknown`。
-5. 提交前一定跑下面这个检查。
+5. 改完 `annotation.json` 后，重新生成规范的 `annotations.jsonl`（保持两份一致）。
+
+```powershell
+uv run python scripts/json2jsonl.py
+```
+
+> 即使忘了这一步，推送到 `main` 后 GitHub Actions（`update-test-annotation-summary.yml`）也会自动重跑该脚本并把同步后的 `annotations.jsonl` 提交回仓库；但本地先生成可以让同一个提交就保持一致，也便于本地评测。CI 用 `--check` 模式校验是否同步：
+
+```powershell
+uv run python scripts/json2jsonl.py --check
+```
+
+6. 提交前一定跑下面这个检查。
 
 ```powershell
 uv run python scripts/summarize_test_annotations.py
@@ -575,6 +587,7 @@ uv run python scripts/summarize_test_annotations.py
 
 - `scripts/preannotate_test.py`：对 `dataset/test/images` 跑预标注，生成待人工核对的 `annotation.json` 草稿。
 - `scripts/summarize_test_annotations.py`：统计当前 test 标注里每个 `pXX` 的出现次数，并检查图片与标注是否一一对应。
+- `scripts/json2jsonl.py`：把人工维护的分组式 `annotation.json` 转换为作业规范要求的 `annotations.jsonl`（字段重命名 + bbox 边界钳制），支持 `--check` 仅校验同步。
 - `scripts/eval_self.py`：复用标注框裁剪后的单脸口径，适合先看识别本身是否区分开。
 - `scripts/eval_end2end.py`：复用真实 `Recognizer.recognize_image()` 整图链路，做“检测框 ↔ 标注框 IoU 贪心配对 + 端到端 top-1”评测。
 - `scripts/analyze_threshold.py`：只看注册集内部相似度分布，用来给 unknown 阈值找候选值。
