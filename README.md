@@ -1,522 +1,247 @@
-# FacePass - 本地人脸识别系统
+# FacePass — 本地人脸识别系统
 
-FacePass 是一个课程大作业项目，目标是在本地完成图片上传、人脸检测、身份识别与结果可视化。当前版本完成了模型端、后端、前端三层分离的最小闭环，并加入边界错误处理、日志和重试机制。前端为纯 HTML + JS 页面（早期的 Gradio 界面已移除），由后端 `GET /` 直接返回，整套服务单进程即可跑起来。
+FacePass 是一个在**本地运行**的人脸识别系统：上传图片 → 检测人脸 → 与身份库比对 → 在原图上标出人脸框、身份与相似度。检测与识别基于 [InsightFace](https://github.com/deepinsight/insightface) 的 `buffalo_l` 预训练模型，全程本地推理，不调用任何云端 API。
 
-当前模型层支持两种实现：
+- **检索式识别**：注册照提取 embedding 建库，识别时做余弦最近邻 + 阈值判定，支持开集（库外人脸判为 `unknown`）。
+- **三层架构**：模型端 / 后端（FastAPI）/ 前端（纯 HTML + JS），单进程即可运行。
+- **开箱即用的 Web 界面**：识别、录入、底库、批量评估四个标签页。
+- **CPU 默认可跑**，可选切换 GPU 加速。
 
-- `insightface`：默认运行实现，使用 InsightFace 完成人脸检测与特征提取。
-- `fake`：测试替身实现，不下载权重，用于在 CI / 本地测试中验证后端与接口解耦。
+---
 
-## 结构
+## 快速开始
 
-```text
-src/
-|-- common/              # 日志、重试、安全图片解码、通用异常
-|-- face_model/          # 模型端：FaceModel 抽象、DetectedFace、InsightFace / Fake 实现
-|-- backend/             # 后端：Gallery、Recognizer、FastAPI API、配置、外部数据集导入
-|   `-- dataset_import.py # 解析上传的 test.zip / 本机数据集目录并跑外部评测
-|-- eval/                # 评测内核：CelebA / 单脸 / 端到端数据集、指标与出图，被脚本和后端复用
-`-- frontend/
-    `-- static/
-        `-- index.html   # Web 前端（纯 HTML + JS），由后端 GET / 直接返回
-run.bat                  # Windows 双击启动入口（瘦壳：找到一个 python 去跑 launcher.py）
-scripts/
-|-- launcher.py          # 启动向导：检测 uv/python/venv、查依赖、选 CPU/GPU、写 config、启动
-|-- run_dev.py           # 一键启动脚本（只启后端，前端由后端内置返回）
-|-- check_runtime.py     # 打印 onnxruntime provider 可用性，确认是否吃到 GPU
-|-- preannotate_test.py  # 为 dataset/test/images 生成预标注草稿
-|-- summarize_test_annotations.py # 统计 test 标注人数并检查漏标/多余标注
-|-- eval_self.py         # 单脸裁剪口径评测脚本
-|-- analyze_threshold.py # 注册集相似度分布与阈值分析
-|-- eval_end2end.py      # 多脸端到端评测与出图
-|-- eval_celeba.py       # CelebA 100 类裁剪脸 top-1 评测与出图
-`-- check_celeba_leakage.py # 检查 CelebA register/test 是否存在相同文件（数据泄漏）
-dataset/
-|-- identities.csv       # 身份 ID 到显示名映射，已纳入版本控制
-|-- registered/          # 真实注册集：p01..p20 注册照目录，已纳入版本控制
-`-- test/                # 自采测试图与标注目录，测试图已纳入版本控制
-celeba_100_identities_3reg_3test/ # CelebA 子集：register/ 与 test/，各身份 3 注册 3 测试，已纳入版本控制
-data/
-|-- registered/          # 测试 / 脚本 fixture
-|-- test/                # 测试 / 脚本 fixture
-`-- tmp_*                # 临时样本，不是正式数据集根目录
-models/                  # gallery.pkl 等本地产物，不进 git
-reports/                 # 评测 JSON / PNG 输出，本地产物，不进 git
-tests/                   # 接口、边界和错误路径测试
-requirements.txt         # pip 依赖列表（约束与 pyproject.toml 一致）
-config.example.toml      # 模型路径与阈值的示例配置
-```
+> 目标：5 分钟内在浏览器里跑起人脸识别。需要 Python 3.10。推荐用 [`uv`](https://docs.astral.sh/uv/) 管理环境（没有 `uv` 用 `pip` 也可以，见[依赖管理](#依赖管理)）。
 
-## 依赖
-
-> **普通使用者无需手动执行本节命令。** 直接双击仓库根的 `run.bat`，启动向导会自动检测并安装依赖、选择 CPU/GPU 并启动（见 [运行 → 方式一](#方式一双击-runbatwindows-推荐)）。本节以及「方式二：命令行启动」中的命令，面向 CI、自动化脚本，或需要手动控制环境、进行调试的进阶用户。
-
-本项目使用 `uv` 管理依赖。默认依赖固定为 CPU 版 `onnxruntime==1.22.1`，这样 CPU-only 机器、测试环境和 CI 都能直接安装运行。较新的 `1.24.x` 在本项目的 CPython 3.10 Windows 环境没有可用 wheel。
+**1. 安装依赖**
 
 ```powershell
 uv sync
 ```
 
-### 没有 uv？用 pip
-
-如果你本机没有装 `uv`，可以改用 `pip` + 仓库根的 [`requirements.txt`](requirements.txt)，它的依赖约束与 `pyproject.toml` 保持一致：
+**2. 下载模型**（约 326 MB，详见[模型下载](#模型下载)）
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+uv run python -c "import insightface; insightface.app.FaceAnalysis(name='buffalo_l')"
 ```
 
-之后本文档里所有 `uv run python ...` / `uv run uvicorn ...` / `uv run pytest ...` 命令，**把开头的 `uv run` 去掉、直接用激活环境里的 `python` 即可**，例如：
+模型会下载到 `~/.insightface/models/buffalo_l/`。在项目根新建 `config.toml`，把路径填进去：
+
+```toml
+[model]
+path = "C:/Users/<你的用户名>/.insightface/models/buffalo_l"
+
+[recognition]
+threshold = 0.30
+```
+
+**3. 启动服务**
 
 ```powershell
-# uv run python scripts/run_dev.py
-python scripts/run_dev.py
-
-# uv run uvicorn src.backend.api:app --port 8000
-python -m uvicorn src.backend.api:app --port 8000
-
-# uv run pytest tests -q
-python -m pytest tests -q
+uv run python scripts/run_dev.py
 ```
 
-GPU 切换、`uv pip install` 等小节同样适用：没有 uv 时把 `uv pip install` 换成普通 `pip install` 即可。`run.bat` 也会自动处理这一点——找不到 `uv` 时会退回到系统 `python`（见下文“运行”）。
+Windows 用户也可以直接**双击仓库根的 `run.bat`** 一键启动（首次会有向导自动装依赖、选 CPU/GPU，无需手敲命令）。
 
-如果你本机已经配好了 NVIDIA 驱动，可以只在**本地当前虚拟环境**里把 ORT 切到 GPU 版，而不用改仓库默认依赖。Windows 上建议把 ORT 和它依赖的 CUDA/cuDNN Python 运行库一起装进 `.venv`：
+**4. 打开浏览器**
+
+访问 <http://127.0.0.1:8000>，在「人脸识别」页上传图片即可看到检测框与识别结果。注册集 `dataset/registered/`（p01–p20）已随仓库提供，启动即建库。
+
+---
+
+## 功能与界面
+
+启动后访问 <http://127.0.0.1:8000>，Web 界面包含四个标签页：
+
+| 标签页 | 功能 |
+| --- | --- |
+| 人脸识别 | 上传图片，检测所有人脸并标注身份、相似度，库外人脸标为 `unknown` |
+| 录入人脸 | 一人多张照片批量注册为新身份，实时重建底库 |
+| 身份库 | 查看当前已注册的全部身份及注册图数量 |
+| 批量评估 | 上传 `test.zip` 或选本机数据集目录，跑端到端评测并内联展示混淆矩阵等图表 |
+
+---
+
+## 模型下载
+
+本项目使用 InsightFace 的 `buffalo_l` 预训练模型包（人脸检测 + 关键点对齐 + ArcFace 识别一体），下载约 275 MB、解压后约 326 MB。模型权重不随仓库分发（`.onnx` 已在 `.gitignore` 中排除），需自行获取，二选一：
+
+**方式 A — 自动下载（推荐）。** 装好依赖后执行一次，自动下载并解压到 `~/.insightface/models/buffalo_l/`（Windows 为 `C:\Users\<用户名>\.insightface\models\buffalo_l\`）：
+
+```powershell
+uv run python -c "import insightface; insightface.app.FaceAnalysis(name='buffalo_l')"
+```
+
+**方式 B — 手动下载 zip。** 从 InsightFace 官方 Release 下载并解压：
+
+- 官方直链：<https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip>
+
+解压得到的 `buffalo_l/` 目录应包含 5 个文件：`det_10g.onnx`、`w600k_r50.onnx`、`1k3d68.onnx`、`2d106det.onnx`、`genderage.onnx`。
+
+> 两种方式都需要把 `config.toml` 的 `[model].path` 指向那个**直接包含上述 `.onnx` 文件的 `buffalo_l` 目录**（不是它的上级缓存目录）。如官方源访问不畅，可自行准备国内网盘镜像并在此补充链接。
+
+---
+
+## 配置
+
+配置写在项目根的 `config.toml`（可复制 [`config.example.toml`](config.example.toml) 修改）：
+
+```toml
+[model]
+path = "C:/Users/<用户名>/.insightface/models/buffalo_l"  # buffalo_l 目录，TOML 建议用正斜杠
+
+[recognition]
+threshold = 0.30   # 余弦相似度阈值，低于此值判为 unknown
+```
+
+模型路径解析优先级为 `CLI 参数 > 启动向导 > config.toml`；也可用环境变量 `FACEPASS_MODEL_PATH` 或命令行 `--model-path` 临时覆盖。
+
+---
+
+## 运行方式
+
+### 双击 `run.bat`（Windows 一键）
+
+双击仓库根的 `run.bat` 即可启动，无需手敲命令。它是一个瘦壳，会找到一个可用的 Python 去运行启动向导 `scripts/launcher.py`，由向导完成首次配置：检测 `uv` / `.venv` 环境、按需安装依赖、选择 CPU 或 GPU，并把选择写入 `config.toml` 的 `[runtime]` 表，之后直接据此启动。需要重新选择时运行 `run.bat --reconfigure`。
+
+> 进程异常退出时窗口会停下显示错误码，便于排查。启动后浏览器打开 <http://127.0.0.1:8000>。
+
+### 命令行启动
+
+```powershell
+# 启动后端（Web 前端由后端 GET / 直接返回，单进程）
+uv run python scripts/run_dev.py
+
+# 临时指定模型目录
+uv run python scripts/run_dev.py --model-path D:/models/buffalo_l
+
+# 健康检查
+curl http://127.0.0.1:8000/health
+```
+
+### GPU 加速（可选）
+
+`InsightFaceModel` 默认优先尝试 `CUDAExecutionProvider`，不可用时自动回退到 CPU。要启用 GPU，在当前虚拟环境里把 onnxruntime 换成 GPU 版（不要改动仓库默认依赖，以免影响其他环境与 CI 的可移植性）：
 
 ```powershell
 uv pip uninstall onnxruntime
 uv pip install "onnxruntime-gpu[cuda,cudnn]"
 ```
 
-这一步是可选本地增强，不应直接改成项目默认依赖，否则会降低其他同学和 CI 的可移植性。不同 Python / Windows 组合下可用的 GPU wheel 版本可能不同，安装后请立刻用下面的诊断脚本确认 provider 是否真的起来。
-
-后端默认配置在 `src/backend/config.py`，当前 `model_name="insightface"`。如果只想跑不依赖权重的后端集成测试，可以在测试里把配置切到 `fake`。
-
-## 运行
-
-运行 `insightface` 模型前，需要先在本地准备好 `buffalo_l` 模型目录。项目不托管、也不会自动下载模型权重；当前适配器按“`buffalo_l` 模型目录本身”加载（即传入直接包含 `*.onnx` 的那个目录），不是 `models_cache` 根目录。
-
-### 模型下载
-
-本项目使用 InsightFace 的 `buffalo_l` 预训练模型包（人脸检测 + 关键点对齐 + ArcFace 识别一体），下载约 275 MB、解压后约 326 MB。**该模型超过 50 MB，下载方式如下（任选其一）：**
-
-**方式 A：用 insightface 自动下载（推荐）。** 装好依赖（`uv sync`）后执行一次，会自动下载并解压到 `~/.insightface/models/buffalo_l/`（Windows 为 `C:\Users\<你的用户名>\.insightface\models\buffalo_l\`）：
+`run.bat` 向导选择 GPU 时会用独立的 `.venv-gpu`（约 2.8 GB，含 CUDA/cuDNN 运行库），与项目 `.venv` 隔离。用下面的脚本确认 GPU provider 是否真正生效：
 
 ```powershell
-uv run python -c "import insightface; insightface.app.FaceAnalysis(name='buffalo_l')"
+uv run python scripts/check_runtime.py --model-path D:/models/buffalo_l
 ```
 
-**方式 B：手动下载 zip。** 从 InsightFace 官方 Release 下载并解压：
+输出中 `available_providers` 与 `session_providers` 都包含 `CUDAExecutionProvider` 即代表 GPU 推理可用。不再使用 GPU 时，删除 `.venv-gpu` 目录即可回收空间，再运行 `run.bat --reconfigure` 把设备切回 CPU。
 
-- 官方直链：<https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip>
+---
 
-解压后会得到一个 `buffalo_l/` 目录，里面应包含 5 个文件：`det_10g.onnx`、`w600k_r50.onnx`、`1k3d68.onnx`、`2d106det.onnx`、`genderage.onnx`。
+## API 参考
 
-> 无论用哪种方式，最终都把 `config.toml` 的 `[model].path` 指向那个**直接包含上述 `.onnx` 文件的 `buffalo_l` 目录**即可。如官方源访问不畅，可自行准备国内网盘镜像（如百度网盘）后在本节补上链接。
-
-### 准备工作
-
-1. 准备本地 `buffalo_l` 模型目录（见上「[模型下载](#模型下载)」），例如 `F:\InsightFace\models_cache\models\buffalo_l` 或自动下载得到的 `~/.insightface/models/buffalo_l`。
-2. 在项目根的 `config.toml` 里写好 `[model].path`（见下文），或在启动时用 `--model-path` 显式传入。
-3. 准备注册集：将 `p01..p20` 的注册照放到 `dataset/registered/p01/` 等目录。
-
-### 方式一：双击 `run.bat`（Windows 推荐）
-
-**这是推荐的启动方式，全程无需在命令行手动执行任何 `uv` / `python` 命令。** 直接双击仓库根的 `run.bat` 即可启动。若机器装了 **Windows Terminal**（`wt`），双击会自动在 Windows Terminal 里重新打开，
-并优先用 **PowerShell**（`pwsh` > `powershell`，都没有才退回 `cmd`），而不是旧的 cmd 窗口
-（已在终端里运行时不会重开；想关掉这个行为设环境变量 `FACEPASS_NO_WT=1`）。`run.bat` 只是个瘦壳——找到一台机器上任意可用的 python
-（优先 `.venv`，否则系统 `python`，再否则 `uv run --no-project python`）去运行
-`scripts/launcher.py`，由后者完成**首次启动向导**：
-
-1. 检测当前机器上的 `uv`、`python` 与项目虚拟环境 `.venv`。
-2. 选择运行环境：优先复用 `uv` 管理的 `.venv`；尚未初始化时可选择执行 `uv sync`；无 `uv` 时改用项目
-   `.venv` 或全局 `python`，均不可用则退出。
-3. 校验运行依赖是否齐备，缺失时列出并可一键安装（`uv sync` 或 `pip install -r requirements.txt`）。
-   onnxruntime 在确认 CPU/GPU 后再单独处理。
-4. 选择 CPU 或 GPU：
-   - **CPU**：在所选环境中确保 CPU 版 onnxruntime 就绪后启动。
-   - **GPU**：使用独立的 `.venv-gpu`，与项目 `.venv` 隔离，不受 `uv` 回同步影响。首次会创建该环境、
-     安装 `onnxruntime-gpu[cuda,cudnn]` 并验证 CUDA，此后复用、不再重装；即便期间以 CPU 模式运行过也不受影响。
-     **首次选择 GPU 会额外下载 CUDA / cuDNN 等运行库，体积约 2.4 GB**（`.venv-gpu` 总大小约 2.8 GB，
-     远大于 CPU 版 `.venv` 的约 0.5 GB）；之后复用、不再重复下载。磁盘紧张时可只用 CPU，或参见
-     [清理 GPU 环境](#清理-gpu-环境释放磁盘)。
-     若无法创建 `.venv-gpu`（缺少 uv，或 python 不含 venv/pip 等），会说明原因并提供三种处理方式：
-     装入当前环境、回退 CPU、退出。
-5. 将选择写入 `config.toml` 的 `[runtime]` 表（`device` 与 `launcher`），此后双击直接据此启动；
-   若该环境失效（缺少虚拟环境、依赖或 CUDA）会自动回退并重新运行向导。如需强制重选，执行
-   `run.bat --reconfigure`。
-
-> 注：模型路径是否存在、模型校验等仍由后端启动时完成（不变）。进程异常退出时窗口会**停下来显示
-> 错误码**，不会一闪而过。启动后浏览器打开 `http://127.0.0.1:8000` 即是 Web 界面。
-
-### 方式二：命令行启动（进阶 / 调试用）
-
-> 普通使用者用方式一双击 `run.bat` 即可，无需手动执行 `uv run` / `python`。下列命令面向 CI、自动化脚本，或需要手动控制环境、进行调试的进阶用户。
-
-```powershell
-# 一键启动（只启后端，Web 前端由后端 GET / 直接返回）
-uv run python scripts/run_dev.py
-
-# 需要临时指定模型目录时
-uv run python scripts/run_dev.py --model-path F:\InsightFace\models_cache\models\buffalo_l
-
-# 或手动起后端
-$env:FACEPASS_MODEL_PATH = "F:\InsightFace\models_cache\models\buffalo_l"
-uv run uvicorn src.backend.api:app --port 8000
-```
-
-`run_dev.py` **只启动 FastAPI 后端**，Web 前端由 `GET http://127.0.0.1:8000/` 直接返回，单进程即可。早期的 Gradio 前端（`src/frontend/app.py`）已移除。
-
-如果路径校验通过，显式传入的模型目录会被写入项目根的 `config.toml`。TOML 里建议使用正斜杠：
-
-```toml
-[model]
-path = "F:/InsightFace/models_cache/models/buffalo_l"
-
-[recognition]
-threshold = 0.30
-```
-
-也可以参考并复制仓库里的 [`config.example.toml`](config.example.toml)：
-
-```toml
-[model]
-# Fill this with the buffalo_l model directory itself, not the models cache root.
-path = "models/buffalo_l"
-
-[recognition]
-# Placeholder default. Replace this with a threshold chosen from real evaluation reports.
-threshold = 0.30
-```
-
-后续未显式传 `--model-path` 时，后端会按 `CLI > GUI > config.toml` 的优先级解析模型路径。
-
-当前 `InsightFaceModel` 默认会优先尝试 `CUDAExecutionProvider`，不可用时自动回退到 `CPUExecutionProvider`。因此装好 GPU 版 `onnxruntime` 和匹配的 CUDA 环境后可以直接吃到 GPU；未配置时仍会按 CPU 跑通。
-
-可以用下面的脚本检查当前环境是否真的暴露了 CUDA provider；如果同时传 `--model-path`，脚本还会把已加载 ONNX session 的 provider 打出来：
-
-```powershell
-uv run python scripts/check_runtime.py
-uv run python scripts/check_runtime.py --model-path F:\InsightFace\models_cache\models\buffalo_l
-```
-
-如果输出里的 `runtime.available_providers` 和 `session_providers` 都包含 `CUDAExecutionProvider`，说明当前 FacePass 进程已经实际具备 GPU 推理能力。
-
-如果你已经按上面的方式把 `.venv` 切到了 GPU 版 ORT，就不要再直接用会自动按锁文件回同步的默认 `uv run` 工作流；请改用当前虚拟环境里的解释器：
-
-```powershell
-.\.venv\Scripts\python.exe scripts/check_runtime.py --model-path F:\InsightFace\models_cache\models\buffalo_l
-.\.venv\Scripts\python.exe scripts/run_dev.py --model-path F:\InsightFace\models_cache\models\buffalo_l
-```
-
-`InsightFaceModel` 在选择 `CUDAExecutionProvider` 时会先调用 `onnxruntime.preload_dlls(directory="")`，优先从 Python site-packages 里预加载 NVIDIA DLL，再创建 ONNX session；这样可以减少手工改系统 `PATH` 的需求，同时保持 CPU-only 默认安装不受影响。
-
-健康检查：
-
-```powershell
-curl http://127.0.0.1:8000/health
-```
-
-### 清理 GPU 环境（释放磁盘）
-
-GPU 模式使用的独立 `.venv-gpu` 体积较大（约 2.8 GB，主要是 CUDA / cuDNN 运行库）。如果你之前用过
-GPU、之后打算只用 CPU，直接删掉这个目录即可回收空间——它与项目 `.venv` 完全隔离，删除不会影响 CPU 运行：
-
-```powershell
-Remove-Item -Recurse -Force .venv-gpu
-```
-
-删除后请把 `config.toml` 里 `[runtime]` 的 `device` 改回 CPU，最稳妥的做法是重跑一次向导让它重新写入：
-
-```powershell
-.\run.bat --reconfigure
-```
-
-> 说明：`run.bat --reconfigure` 会忽略已保存的 `[runtime]` 配置、重新询问环境与 CPU/GPU 并覆盖写回。
-> 即使忘了改 `config.toml`，下次启动时向导也会发现 `.venv-gpu` 已不存在、自动回退重新选择，不会报错。
-> 之后若又想用 GPU，再次选择 GPU 会重新创建 `.venv-gpu`（需重新下载约 2.4 GB）。
-
-## API
-
-所有接口返回 JSON，错误时格式为 `{"message": "..."}` 。
+所有接口返回 JSON，错误时为 `{"message": "..."}`，并带稳定的 Pydantic `response_model`。
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| `GET` | `/` | 返回 Web 前端页面（`index.html`） |
-| `GET` | `/health` | 服务存活检查，返回 `{"status":"ok"}` |
+| `GET` | `/` | 返回 Web 前端页面 |
+| `GET` | `/health` | 存活检查，返回 `{"status":"ok"}` |
 | `GET` | `/identities` | 列出底库中所有已注册身份 |
 | `POST` | `/recognize` | 上传图片，检测人脸并返回识别结果 |
-| `POST` | `/register` | 上传单张图片，注册人脸到指定身份 |
+| `POST` | `/register` | 上传单张图片，注册到指定身份 |
 | `POST` | `/register/batch` | 批量上传图片，注册到同一身份 |
 | `POST` | `/dataset-eval/inspect` | 检查上传的 `test.zip` 或本机数据集目录布局是否合法 |
-| `POST` | `/dataset-eval/run` | 对 `test.zip` 或本机数据集目录跑端到端评测，返回指标与内联图 |
-
-> 所有响应均带 Pydantic `response_model`，结构稳定，前端不需要猜字段。
-
----
-
-### `GET /health`
-
-```
-GET http://127.0.0.1:8000/health
-→ {"status": "ok"}
-```
-
----
-
-### `GET /identities`
-
-返回底库中全部身份信息：
-
-```json
-{
-  "identities": [
-    {
-      "identity_id": "p01",
-      "name": "成龙",
-      "count": 1,
-      "prototype_count": 1,
-      "valid_image_count": 3
-    }
-  ]
-}
-```
-
-字段说明：
-
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `identity_id` | `string` | 身份 ID |
-| `name` | `string \| null` | 显示名（来自 `identities.csv`） |
-| `count` | `int` | 兼容字段，等于 `prototype_count` |
-| `prototype_count` | `int` | 原型向量数 |
-| `valid_image_count` | `int` | 该身份的有效注册图数量 |
-
----
+| `POST` | `/dataset-eval/run` | 对数据集跑端到端评测，返回指标与内联图表 |
 
 ### `POST /recognize`
 
-上传一张图片，检测其中所有人脸并返回识别结果。
-
-**请求**：`multipart/form-data`
-
-| 参数 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `file` | `file` | 是 | 图片文件（JPG/PNG/WEBP，≤10MB） |
-
-**成功响应 (200)**：
+`multipart/form-data`，参数 `file`（图片，JPG/PNG/WEBP，≤10 MB）。返回图中每张人脸的识别结果：
 
 ```json
 [
-  {
-    "bbox": [120, 80, 200, 240],
-    "identity_id": "p01",
-    "name": "成龙",
-    "similarity": 0.873,
-    "is_unknown": false
-  },
-  {
-    "bbox": [400, 60, 180, 220],
-    "identity_id": "unknown",
-    "name": null,
-    "similarity": 0.215,
-    "is_unknown": true
-  }
+  {"bbox": [120, 80, 200, 240], "identity_id": "p01", "name": "成龙", "similarity": 0.873, "is_unknown": false},
+  {"bbox": [400, 60, 180, 220], "identity_id": "unknown", "name": null, "similarity": 0.215, "is_unknown": true}
 ]
 ```
 
-字段说明：
-
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `bbox` | `[int,int,int,int]` | 人脸框 `[x, y, width, height]` |
-| `identity_id` | `string` | 匹配到的身份 ID，未匹配时为 `"unknown"` |
-| `name` | `string \| null` | 匹配身份的显示名，unknown 时为 `null` |
+| `bbox` | `[int,int,int,int]` | 人脸框 `[x, y, width, height]`（绝对像素） |
+| `identity_id` | `string` | 匹配身份 ID，未匹配为 `"unknown"` |
+| `name` | `string \| null` | 显示名（来自 `identities.csv`），unknown 时为 `null` |
 | `similarity` | `float` | 与底库最佳匹配的余弦相似度 |
-| `is_unknown` | `bool` | 是否低于阈值被判定为 unknown |
+| `is_unknown` | `bool` | 是否低于阈值被判为 unknown |
 
-**错误**：
-- `400` — 图片格式无效或未检测到人脸
-- `413` — 图片超过 10MB
+错误：`400`（图片无效 / 未检测到人脸）、`413`（超过 10 MB）。
 
----
+### 注册接口
 
-### `POST /register`
+- `POST /register`：表单 `file` + `identity_id`（如 `p21`，仅限字母数字下划线连字符）+ 可选 `name`。注册后自动重建底库，无需重启。
+- `POST /register/batch`：表单 `files`（多张）+ `identity_id` + 可选 `name`，返回 `{"identity_id", "name", "saved"}`。
 
-上传单张图片，注册到指定身份。注册成功后自动重建底库，无需重启。
+错误：`400`（图片无效 / `identity_id` 非法 / 无一张成功）、`413`（图片过大）、`503`（识别器未初始化）。
 
-**请求**：`multipart/form-data`
+### 数据集评测接口
 
-| 参数 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `file` | `file` | 是 | 人脸照片 |
-| `identity_id` | `string` | 是 | 身份 ID，例如 `p21`（仅允许字母、数字、下划线、连字符，不能为空） |
-| `name` | `string` | 否 | 显示名，会写入 `identities.csv` |
+- `inspect`：仅校验布局，返回 `{"has_registered": bool}`。
+- `run`：表单 `gallery_choice` 选 `local`（仓库注册集）或数据集自带注册集建库；返回评测指标、混淆对、漏检/误检列表，以及内联（base64）的混淆矩阵、检测、准确率三张图。
 
-**成功响应 (200)**：
-
-```json
-{
-  "identity_id": "p21",
-  "name": "张三"
-}
-```
-
-**错误**：
-- `400` — 图片无效 / 未检测到人脸 / `identity_id` 非法
-- `413` — 图片过大
-- `503` — 识别器未初始化
+前端「批量评估」页已接入这两个接口：支持上传 `test.zip`，或填入本机数据集目录绝对路径（超大数据集免上传）。目录模式接受两种布局：选中目录本身就是测试目录（直接含 `images/` 与标注文件），或选中数据集根目录（含 `test/images/` 与标注文件）。脚本化评测见[评测](#评测)。
 
 ---
 
-### `POST /register/batch`
+## 项目结构
 
-批量上传多张图片，全部注册到同一个身份。适合注册集整理时批量导入。
-
-**请求**：`multipart/form-data`
-
-| 参数 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `files` | `file[]` | 是 | 多张人脸照片 |
-| `identity_id` | `string` | 是 | 目标身份 ID（命名约束同上） |
-| `name` | `string` | 否 | 显示名 |
-
-**成功响应 (200)**：
-
-```json
-{
-  "identity_id": "p21",
-  "name": "张三",
-  "saved": 3
-}
+```text
+src/
+├── common/        # 日志、重试、安全图片解码、通用异常
+├── face_model/    # 模型端：FaceModel 抽象、DetectedFace、InsightFace / Fake 实现
+├── backend/       # 后端：Gallery、Recognizer、FastAPI API、配置、外部数据集导入
+├── eval/          # 评测内核：CelebA / 单脸 / 端到端数据集、指标与出图，脚本和后端复用
+└── frontend/static/index.html   # Web 前端（纯 HTML + JS），由后端 GET / 返回
+scripts/           # 启动向导、评测与数据维护脚本（见下文）
+dataset/           # 自采数据集：identities.csv、registered/（p01–p20）、test/
+celeba_100_identities_3reg_3test/   # CelebA 100 类子集（各 3 注册 3 测试，裁剪脸）
+tests/             # 接口、边界与错误路径测试
+run.bat            # Windows 一键启动入口
+config.example.toml
 ```
 
-字段说明：
+模型层有两种实现：`insightface`（默认，真实推理）与 `fake`（测试替身，不下载权重，用于 CI / 单元测试解耦后端与模型）。
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `identity_id` | `string` | 身份 ID |
-| `name` | `string` | 显示名 |
-| `saved` | `int` | 成功录入的图片数量 |
+`scripts/` 下的主要入口：
 
-**错误**：
-- `400` — 没有一张图片成功录入（全部没人脸或格式错误）/ `identity_id` 非法
-- `413` — 有图片超过 10MB
-- `503` — 识别器未初始化
+| 脚本 | 用途 |
+| --- | --- |
+| `run_dev.py` | 启动后端服务 |
+| `launcher.py` | `run.bat` 调用的首次启动向导 |
+| `check_runtime.py` | 诊断 onnxruntime provider（确认是否吃到 GPU） |
+| `preannotate_test.py` | 为 `dataset/test/images` 生成预标注草稿 |
+| `json2jsonl.py` | 由 `annotation.json` 生成规范的 `annotations.jsonl` |
+| `summarize_test_annotations.py` | 统计 test 标注并校验图片与标注一一对应 |
+| `eval_self.py` / `eval_end2end.py` / `eval_celeba.py` | 单脸 / 端到端 / CelebA 评测 |
+| `analyze_threshold.py` | 注册集相似度分布与阈值分析 |
+| `check_celeba_leakage.py` | 检查 CelebA register/test 是否有重复文件 |
 
 ---
-
-### `POST /dataset-eval/inspect` 与 `POST /dataset-eval/run`
-
-对一份外部数据集（上传的 `test.zip`，或本机数据集目录绝对路径 `dataset_dir`，二选一）做端到端评测。
-
-- `inspect`：仅检查布局是否合法，返回 `{"has_registered": bool}`，表示该数据集是否自带注册集。
-- `run`：`gallery_choice` 表单字段选择用 `local`（仓库注册集）还是数据集自带注册集建库；返回评测指标、混淆对、漏检/误检列表，以及内联（base64 data URL）的混淆矩阵、检测、准确率三张图。
-
-HTML 前端的「评估」标签页已接入这两个接口：支持上传 `test.zip`，或填入/用系统对话框选择本机数据集目录绝对路径（超大数据集免上传）。如需脚本化批量评测，也可直接走 [`scripts/eval_end2end.py`](scripts/eval_end2end.py)（见下文“数据与评测”）。
-
----
-
-## 注册新身份（给负责增加数据的同学）
-
-### 方式一：Web 界面（推荐）
-
-启动服务后打开 `http://127.0.0.1:8000`，界面有「识别 / 录入 / 底库」三个标签页。切到「录入」：
-
-- 拖入或选择一人多张照片（支持批量）
-- 填写身份 ID 和姓名
-- 点击「录入底库」，完成后可在「底库」页看到更新
-
-### 方式二：Python 脚本批量注册
-
-可以用 Python 脚本调用 `/register/batch` 接口，适合整理大量身份时使用：
-
-```python
-import requests
-from pathlib import Path
-
-API = "http://127.0.0.1:8000"
-
-# 为 identity p21 注册 3 张照片
-identity_dir = Path("dataset/registered/p21")
-files = [
-    ("files", (p.name, p.read_bytes(), "image/jpeg"))
-    for p in identity_dir.glob("*.jpg")
-]
-resp = requests.post(
-    f"{API}/register/batch",
-    data={"identity_id": "p21", "name": "张三"},
-    files=files,
-)
-print(resp.json())  # → {"identity_id": "p21", "name": "张三", "saved": 3}
-```
-
-### 注册集目录结构约定
-
-```
-dataset/
-|-- identities.csv              # 身份映射表（注册脚本自动更新）
-`-- registered/
-    |-- p01/
-    |   |-- p01_r01.jpg
-    |   |-- p01_r02.jpg
-    |   `-- p01_r03.jpg
-    |-- p02/
-    |   `-- ...
-    `-- p21/                     # 新身份
-        |-- p21_r01.jpg
-        `-- p21_r02.jpg
-```
-
-`identities.csv` 格式为 `identity_id,name,domain`，每注册一个新身份时后端自动 upsert 一行，并保留原有的 `domain` 列不被清空。
-
----
-
-## 通过 API 编写批量测试脚本（给负责评测的同学）
-
-### 核心思路
-
-1. **启动服务** → 双击 `run.bat` 或 `uv run python scripts/run_dev.py`
-2. **注册数据** → 通过 `/register/batch` 导入所有注册照
-3. **遍历测试图** → 逐张调 `/recognize` 获取检测结果
-4. **对比标注** → 拿 API 返回的 `bbox` / `identity_id` / `similarity` 与 `annotation.json` 做配对
-5. **计算指标** → 统计 top-1 准确率、检测召回率、unknown 准确率等
-
-### 简单示例：遍历测试图并收集结果
-
-```python
-import requests, json
-from pathlib import Path
-
-API = "http://127.0.0.1:8000"
-results = {}
-
-for img_path in Path("dataset/test/images").glob("*.jpg"):
-    with open(img_path, "rb") as f:
-        resp = requests.post(f"{API}/recognize", files={"file": f})
-    results[img_path.name] = resp.json()
-
-with open("results.json", "w") as f:
-    json.dump(results, f, indent=2, ensure_ascii=False)
-```
-
-### 检查服务状态
-
-```python
-health = requests.get(f"{API}/health").json()
-print(health)  # → {"status": "ok"}
-
-# 确认底库中已有多少身份
-identities = requests.get(f"{API}/identities").json()
-print(len(identities["identities"]))  # → 已注册身份数
-```
-
-> 不想自己写配对逻辑时，直接用现成脚本 `scripts/eval_end2end.py` 即可得到完整指标与混淆矩阵（见下文）。
 
 ## 数据与评测
 
-当前仓库内 `dataset/test` 的正式标注文件是 [dataset/test/annotation.json](dataset/test/annotation.json)，格式是“按图片名分组”的 JSON 对象：
+### 数据集结构
+
+```text
+dataset/
+├── identities.csv     # identity_id,name,domain 映射表，注册时自动 upsert
+├── registered/        # 注册集：p01/ … p20/，每身份多张 pXX_rNN.jpg
+└── test/
+    ├── images/        # 测试图：单人照 pXX_tNN.jpg、合照 group_NN.jpg
+    ├── annotation.json    # 人工维护的主标注（可读、分组式）
+    └── annotations.jsonl  # 机器生成的规范标注（见下）
+```
+
+### 标注格式
+
+人工维护的主文件是 **`annotation.json`**（按图片名分组，便于阅读与人工核对）：
 
 ```json
 {
@@ -530,87 +255,54 @@ print(len(identities["identities"]))  # → 已注册身份数
 }
 ```
 
-说明：
+- 顶层 key 为图片文件名；value 是该图所有人脸的列表。
+- `bbox` 为 `[x, y, w, h]` 绝对像素整数；`identity` 取 `p01`–`p20` 或 `unknown`。
+- `score` 是预标注阶段的相似度参考值，评测忽略，人工核对时保留。
 
-- 顶层 key 必须等于图片文件名，例如 `group_01.jpg`、`p01_t01.jpg`。
-- 每个 value 是该图里所有人脸的列表。
-- `bbox` 固定为 `[x, y, w, h]`。
-- `identity` 只能写 `p01`..`p20` 或 `unknown`。
-- `score` 是预标注阶段保留的相似度参考值；评测会忽略它，但人工核对时应该保留。
-- 现有加载器同时兼容 `.json` 和 `.jsonl`。**人工维护的主文件是 `annotation.json`（分组、可读）；作业规范要求的 `annotations.jsonl` 由 `scripts/json2jsonl.py` 从它自动生成，不要手改 jsonl。** 转换时会把字段重命名为规范的 `image` / `image_type` / `faces[].identity_id`，并按图像真实尺寸把越界 bbox 钳制到 `[0, 0, W, H]` 内。
-
-### 向 `dataset/test` 添加图片的必做流程
-
-这是当前最容易出错的地方：**往 `dataset/test/images` 增加图片时，必须同步维护 `dataset/test/annotation.json`。只加图片、不加标注，后面任何人都不知道这张图是谁，也没法直接评测。**
-
-推荐流程：
-
-1. 把图片放进 [dataset/test/images](dataset/test/images)。
-   - 单人照命名为 `pXX_tNN.jpg`，例如 `p06_t02.jpg`。
-   - 合照命名为 `group_NN.jpg`。
-   - 不要提交自己都看不懂含义的文件名。
-2. 同一个提交里更新 [dataset/test/annotation.json](dataset/test/annotation.json)。
-   - 顶层 key 必须和图片文件名完全一致。
-   - 单人照也必须显式写 bbox 和 identity，不要靠文件名猜。
-   - 不确定身份就先写 `unknown`，不要为了“看起来完整”硬写某个 `pXX`。
-3. 如果是新加了一批图片，先跑一次预标注，再人工核对。
+规范的 **`annotations.jsonl`** 由 `scripts/json2jsonl.py` 从 `annotation.json` **自动生成**（字段重命名为 `image` / `image_type` / `faces[].identity_id`，并按图像真实尺寸把越界 bbox 钳制到 `[0, 0, W, H]`）。**不要手改 jsonl**——推送 `annotation.json` 到 `main` 后，GitHub Actions 会自动重新生成并提交 jsonl。本地手动同步：
 
 ```powershell
-uv run python scripts/preannotate_test.py `
-  --images-dir dataset/test/images `
-  --out dataset/test/annotation.json `
-  --registered-root dataset/registered `
-  --overwrite
+uv run python scripts/json2jsonl.py          # 生成
+uv run python scripts/json2jsonl.py --check  # 仅校验是否同步（CI 用）
 ```
 
-4. 预标注只是草稿，必须人工检查后再提交。
-   - 重点看低分项、单人照多脸、多人照漏脸。
-   - 当前规则里，低于 `0.25` 的草稿身份会直接写成 `unknown`。
-5. 改完 `annotation.json` 后，重新生成规范的 `annotations.jsonl`（保持两份一致）。
+### 添加图片或身份
+
+- **新增测试图**：把图片放进 `dataset/test/images/`（单人照 `pXX_tNN.jpg`、合照 `group_NN.jpg`），同一提交里更新 `annotation.json`。可先跑 `preannotate_test.py` 生成草稿再人工核对，提交前用 `summarize_test_annotations.py` 校验图片与标注一一对应。
+- **新增身份**：用 Web「录入人脸」页批量上传，或调用 `/register/batch`：
+
+```python
+import requests
+from pathlib import Path
+
+files = [("files", (p.name, p.read_bytes(), "image/jpeg"))
+         for p in Path("dataset/registered/p21").glob("*.jpg")]
+requests.post("http://127.0.0.1:8000/register/batch",
+              data={"identity_id": "p21", "name": "示例"}, files=files)
+```
+
+### 评测
+
+所有评测脚本读取 `dataset/`，把指标 JSON 与图表写到 `reports/`（不进 git）。
 
 ```powershell
-uv run python scripts/json2jsonl.py
+# 自采 20 类端到端评测（检测 + 识别 + 阈值判定整图链路）
+uv run python scripts/eval_end2end.py `
+  --annotations-path dataset/test/annotation.json `
+  --test-root dataset/test --registered-root dataset/registered `
+  --model-name insightface --threshold 0.30
+
+# CelebA 100 类纯识别 top-1 评测（裁剪脸）
+uv run python scripts/eval_celeba.py --data-dir celeba_100_identities_3reg_3test
 ```
 
-> 即使忘了这一步，推送到 `main` 后 GitHub Actions（`update-test-annotation-summary.yml`）也会自动重跑该脚本并把同步后的 `annotations.jsonl` 提交回仓库；但本地先生成可以让同一个提交就保持一致，也便于本地评测。CI 用 `--check` 模式校验是否同步：
+- `eval_end2end.py` 输出 `reports/end2end_eval.json` 与混淆矩阵、检测、准确率三张图；指标含检测召回/精确率、严格/宽松 top-1、unknown 检出准确率与精确率。
+- `eval_celeba.py` 输出 top-1 准确率、逐类准确率与成功/失败样本；可先用 `check_celeba_leakage.py` 确认 register/test 无重复图片。
+- `eval_self.py` 走标注框裁剪后的单脸口径；`analyze_threshold.py` 分析注册集相似度分布以选取 unknown 阈值（不得用测试集调参）。
 
-```powershell
-uv run python scripts/json2jsonl.py --check
-```
+> 建库时若一张注册图含多张人脸，系统取面积最大的一张并记 warning；像素总数超过 2500 万的图会被跳过。这些均为预期行为。
 
-6. 提交前一定跑下面这个检查。
-
-```powershell
-uv run python scripts/summarize_test_annotations.py
-```
-
-如果输出里“缺少标注的图片”或“多余标注项”不是 `0`，先修 annotation，再提交图片。
-
-目录约定需要特别说明：
-
-- `dataset/`：真实实验数据目录，当前已纳入版本控制；其中 `dataset/registered` 已准备完毕，`dataset/test` 当前主要包含测试图。
-- `data/`：仓库内测试与脚本 fixture 目录，主要放临时合成样本和 `.gitkeep`，不是正式数据集根目录。
-
-外部数据集（`/dataset-eval/*` 接口）支持两种输入：
-
-- `ZIP`：上传较小的 `test.zip`。
-- `文件夹`：直接传本机绝对路径，例如 `F:\datasets\my_eval`。纯浏览器无法可靠暴露任意本机绝对目录，因此目录模式只把路径字符串发给后端，再由后端从本机磁盘读取。
-
-文件夹模式只接受两种明确布局，不再递归猜目录：
-
-- 选中的目录本身就是测试目录：目录下直接有 `images/` 与一个标注文件。
-- 选中的是数据集根目录：目录下直接有 `test/images/` 与对应标注文件。
-
-仓库内相关脚本入口：
-
-- `scripts/preannotate_test.py`：对 `dataset/test/images` 跑预标注，生成待人工核对的 `annotation.json` 草稿。
-- `scripts/summarize_test_annotations.py`：统计当前 test 标注里每个 `pXX` 的出现次数，并检查图片与标注是否一一对应。
-- `scripts/json2jsonl.py`：把人工维护的分组式 `annotation.json` 转换为作业规范要求的 `annotations.jsonl`（字段重命名 + bbox 边界钳制），支持 `--check` 仅校验同步。
-- `scripts/eval_self.py`：复用标注框裁剪后的单脸口径，适合先看识别本身是否区分开。
-- `scripts/eval_end2end.py`：复用真实 `Recognizer.recognize_image()` 整图链路，做“检测框 ↔ 标注框 IoU 贪心配对 + 端到端 top-1”评测。
-- `scripts/analyze_threshold.py`：只看注册集内部相似度分布，用来给 unknown 阈值找候选值。
-
-### 当前 `dataset/test` 标注人数统计
+### 当前 `dataset/test` 标注统计
 
 <!-- TEST_ANNOTATION_COUNTS:START -->
 当前 [dataset/test/annotation.json](dataset/test/annotation.json) 统计如下：
@@ -655,104 +347,25 @@ uv run python scripts/summarize_test_annotations.py --write-readme
 | unknown | 97 |
 <!-- TEST_ANNOTATION_COUNTS:END -->
 
-单脸评测：
+---
+
+## 依赖管理
+
+项目用 `uv` 管理依赖，默认固定 CPU 版 `onnxruntime==1.22.1`，保证 CPU-only 机器、测试环境与 CI 都能直接安装。
 
 ```powershell
-uv run python scripts/eval_self.py `
-  --annotations-path dataset/test/annotation.json `
-  --test-root dataset/test `
-  --registered-root dataset/registered `
-  --model-name insightface `
-  --threshold 0.30
+uv sync
 ```
 
-阈值分析：
+没有 `uv` 时改用 `pip` + [`requirements.txt`](requirements.txt)（约束与 `pyproject.toml` 一致），并把文档中命令开头的 `uv run` 去掉、改用激活环境里的 `python`：
 
 ```powershell
-uv run python scripts/analyze_threshold.py `
-  --registered-root dataset/registered `
-  --model-name insightface `
-  --histogram-path reports/threshold_hist.png
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
 ```
 
-多脸端到端评测：
-
-```powershell
-uv run python scripts/eval_end2end.py `
-  --annotations-path dataset/test/annotation.json `
-  --test-root dataset/test `
-  --registered-root dataset/registered `
-  --model-name insightface `
-  --threshold 0.30
-```
-
-`eval_end2end.py` 会输出：
-
-- `reports/end2end_eval.json`
-- `reports/end2end_confusion_matrix.png`
-- `reports/end2end_detection.png`
-- `reports/end2end_accuracy.png`
-
-端到端评测的指标口径：
-
-- 检测层：`detection_recall`、`detection_precision`、`false_positives`
-- 识别层：严格 `strict_top1_accuracy` 与宽松 `matched_top1_accuracy`
-- `unknown`：标注为 unknown 的检出准确率，以及系统判成 unknown 的精确率
-
-如果本机还没有准备 `dataset/test` 标注或 `dataset/registered` 注册集，`eval_end2end.py` 会打印提示并直接退出，不会抛异常。
-
-启动建库时的几个常见 warning 目前属于预期行为：
-
-- 某张注册图检测到多张人脸时，系统会记录 warning，并使用面积最大的一张做人脸注册。
-- 图片像素总数超过 `25_000_000` 时，`safe_load_image` 会拒绝加载并跳过该图，日志里会显示“图片尺寸过大”。
-
-### CelebA 子集评测
-
-仓库内 `celeba_100_identities_3reg_3test/` 是一个 100 身份的 CelebA 子集，目录结构为 `register/identity_XXXXX/` 与 `test/identity_XXXXX/`，每个身份各 3 张注册图、3 张测试图，图片本身已是裁剪好的人脸。用它做纯识别（不含检测）的 top-1 评测：
-
-```powershell
-uv run python scripts/eval_celeba.py `
-  --data-dir celeba_100_identities_3reg_3test `
-  --model-name insightface
-```
-
-`eval_celeba.py` 会输出：
-
-- `reports/celeba_eval.json`：top-1 准确率、逐类准确率、若干成功/失败样本。
-- `reports/celeba_top1_accuracy.png`
-- `reports/celeba_per_class_accuracy.png`
-
-提交前可以先确认 register/test 之间没有相同图片造成数据泄漏：
-
-```powershell
-uv run python scripts/check_celeba_leakage.py --data-dir celeba_100_identities_3reg_3test
-```
-
-该脚本按文件哈希比对 register 与 test。退出码：`0` 无重叠，`2` 发现跨 register/test 的相同文件，`1` 目录或身份不一致等错误。
-
-## 错误处理
-
-错误按三档处理：
-
-- 致命错误：后端启动阶段模型加载失败、身份库不存在且无法构建、身份库为空，会记录清晰错误并以非零状态退出（`run.bat` 会捕获并停留显示）。
-- 瞬时错误：IO/网络操作使用有限次数指数退避重试；耗尽后返回友好提示，不让进程直接崩掉。
-- 可恢复输入错误：坏图片、空文件、非图片、单张注册图读取失败不重试；API 返回 400/413，建库时跳过坏图并继续。
-
-## 本地模型与大文件
-
-仓库不提交任何超过 50MB 的权重、构建好的身份库或大数组文件。`.gitignore` 已排除：
-
-- `models/`
-- `data/`
-- `*.onnx`
-- `*.pkl`
-- `*.npy`
-- `.venv/`
-- Python 缓存和日志
-
-当前约定是：模型目录由使用者自行下载（下载方式见 [模型下载](#模型下载)）并放在本地任意位置，再通过 `--model-path`、`FACEPASS_MODEL_PATH` 或 `config.toml` 指定。项目本身不负责下载、不依赖 Hugging Face 托管，也不会把模型目录纳入 git。
-
-`dataset/` 与上述模型产物不同：当前仓库已经提交了 `dataset/identities.csv`、`dataset/registered/`、`dataset/test/images/` 和 `dataset/test/annotation.json`。CelebA 子集 `celeba_100_identities_3reg_3test/`（裁剪脸，单图较小）也已纳入版本控制。
+---
 
 ## 测试
 
@@ -760,26 +373,28 @@ uv run python scripts/check_celeba_leakage.py --data-dir celeba_100_identities_3
 uv run pytest tests -q
 ```
 
-当前测试覆盖：
+测试覆盖：Gallery 建库与匹配、Recognizer 阈值与 unknown 判定、API 各路径与错误码、`safe_load_image` 与重试逻辑、`FakeFaceModel` 全链路、端到端/CelebA 评测与各脚本、`json2jsonl` 转换与边界钳制、层边界（后端不导入具体模型、前端不导入 `src.*`）等。
 
-- Gallery 注册、保存、加载、最大相似度匹配。
-- Gallery 空库匹配返回空结果，unknown 语义由 Recognizer 统一持有。
-- Recognizer 阈值判定和 unknown 输出。
-- API 健康检查、身份列表、坏图片 400、正常图片 200、注册接口。
-- `load_identities` 支持注入路径，不再绑定定义时默认配置。
-- `safe_load_image` 坏图/空文件处理。
-- `with_retry` 只重试瞬时异常，不重试 `ValueError`。
-- `FakeFaceModel` 可在不下载权重的情况下完整跑通建库和 `/recognize` HTTP 流程。
-- 多脸端到端评测的 IoU 配对、严格/宽松 top-1、unknown 指标、漏检/误检日志与 bench 脚本产图。
-- CelebA 子集数据集加载、单脸 top-1 评测与 `eval_celeba.py` 脚本，泄漏检查脚本。
-- 外部数据集导入（`test.zip` / 本机目录）的布局解析、`/dataset-eval/inspect` 与 `/dataset-eval/run` 接口。
-- `run_dev.py` 启动后端、`check_runtime.py` provider 诊断脚本。
-- 后端不导入具体模型实现，前端不导入任何 `src.*` 内部模块。
+错误按三档处理：
+
+- **致命错误**（模型加载失败、身份库无法构建或为空）：记录清晰日志并以非零状态退出。
+- **瞬时错误**（IO/网络）：有限次指数退避重试，耗尽后返回友好提示，不崩进程。
+- **可恢复输入错误**（坏图、空文件、非图片）：不重试，API 返回 400/413，建库时跳过坏图继续。
+
+---
+
+## 大文件约定
+
+仓库不提交超过 50 MB 的权重、构建好的身份库或大数组文件。`.gitignore` 已排除 `models/`、`data/`、`*.onnx`、`*.pkl`、`*.npy`、`.venv/` 及缓存日志。模型目录由使用者自行下载（见[模型下载](#模型下载)）。`dataset/` 与 CelebA 子集（裁剪脸、单图较小）已纳入版本控制。
+
+---
 
 ## 后续可改进
 
 - 基于注册集内部相似度分布进一步标定 unknown 阈值（当前使用默认 `0.30`，且严禁用测试集调参）。
-- 持续维护 `dataset/test/annotation.json`；规范的 `annotations.jsonl` 由 `scripts/json2jsonl.py`（及 CI）自动同步生成，无需手改。
+- 扩充自采数据集的身份数与每类样本量，提升评测的统计可靠性。
+
+---
 
 ## 小组成员
 
