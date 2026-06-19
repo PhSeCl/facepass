@@ -9,7 +9,9 @@ on:
       - main
     paths:
       - "dataset/test/annotation.json"
+      - "dataset/test/images/**"
       - "scripts/summarize_test_annotations.py"
+      - "scripts/json2jsonl.py"
       - ".github/workflows/update-test-annotation-summary.yml"
 
 permissions:
@@ -30,18 +32,24 @@ jobs:
         with:
           python-version: "3.10"
 
+      - name: Install converter dependencies
+        run: pip install pillow
+
+      - name: Sync regulation annotations.jsonl from annotation.json
+        run: python scripts/json2jsonl.py
+
       - name: Refresh README summary block
         run: python scripts/summarize_test_annotations.py --write-readme
 
-      - name: Commit README update when changed
+      - name: Commit synced files when changed
         shell: bash
         run: |
-          if git diff --quiet -- README.md; then
-            echo "README summary unchanged"
+          if git diff --quiet -- README.md dataset/test/annotations.jsonl; then
+            echo "README summary and annotations.jsonl unchanged"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add README.md
-          git commit -m "docs: refresh test annotation summary"
+          git add README.md dataset/test/annotations.jsonl
+          git commit -m "data: sync annotations.jsonl and test annotation summary"
           git push
