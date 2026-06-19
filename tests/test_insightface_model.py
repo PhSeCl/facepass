@@ -224,10 +224,13 @@ def test_register_nvidia_dll_directories_skips_when_nvidia_root_is_missing(
     insightface_model_module._register_nvidia_dll_directories(fake_module)
 
 
-def test_insightface_model_resolves_validates_and_persists_explicit_path(
+def test_insightface_model_resolves_and_validates_explicit_path_without_persisting(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    # Loading the model must not write config.toml as a side effect: persisting a
+    # path is an explicit, opt-in decision owned by the interactive launcher
+    # (scripts/run_dev.py), not a consequence of merely passing model_path.
     resolved_path = tmp_path / "resolved-buffalo-l"
     app = FakeFaceAnalysisApp()
     calls: dict[str, object] = {}
@@ -256,7 +259,7 @@ def test_insightface_model_resolves_validates_and_persists_explicit_path(
     assert calls["resolve"] == (tmp_path / "cli-model", None)
     assert calls["validate"] == resolved_path
     assert calls["create"] == (resolved_path, "buffalo_l", ["CPUExecutionProvider"])
-    assert persisted == [resolved_path]
+    assert persisted == []
     assert model.recognition_model is app.models["recognition"]
     assert app.prepare_calls == [(0, (640, 640))]
 

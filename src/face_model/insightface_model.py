@@ -199,8 +199,6 @@ class InsightFaceModel(FaceModel):
             self.model_path = validated_model_path
 
             self._load_runtime(self.providers)
-            if explicit_model_path:
-                model_config.persist_path(validated_model_path)
         except ModelConfigError as exc:
             logger.error("模型加载失败: %s", exc)
             raise

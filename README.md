@@ -43,9 +43,11 @@ uv run python -c "import insightface; insightface.app.FaceAnalysis(name='buffalo
 
 或手动下载 [`buffalo_l.zip`](https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip) 解压，得到一个包含 5 个 `.onnx`（`det_10g`、`w600k_r50`、`1k3d68`、`2d106det`、`genderage`）的 `buffalo_l/` 目录。
 
-### 3. 配置模型路径
+### 3. 配置模型路径（可选）
 
-在项目根新建 `config.toml`（可复制 [`config.example.toml`](config.example.toml)），把 `[model].path` 指向上一步那个**直接包含 `.onnx` 文件的 `buffalo_l` 目录**：
+> 最省事的方式是跳过本步：直接双击 `run.bat`（见下一步）。若没有配置过模型路径，启动时会提示你**粘贴 `buffalo_l` 目录**，校验通过后再问是否保存为默认路径——选「是」即写入 `config.toml`，下次不再询问。
+
+也可以手动配置：在项目根新建 `config.toml`（可复制 [`config.example.toml`](config.example.toml)），把 `[model].path` 指向上一步那个**直接包含 `.onnx` 文件的 `buffalo_l` 目录**：
 
 ```toml
 [model]
@@ -87,6 +89,8 @@ uv run python scripts/run_dev.py
 ### 双击 `run.bat`（Windows 一键）
 
 双击仓库根的 `run.bat` 即可启动，无需手敲命令。它是一个瘦壳，会找到一个可用的 Python 去运行启动向导 `scripts/launcher.py`，由向导完成首次配置：检测 `uv` / `.venv` 环境、按需安装依赖、选择 CPU 或 GPU，并把选择写入 `config.toml` 的 `[runtime]` 表，之后直接据此启动。需要重新选择时运行 `run.bat --reconfigure`。
+
+若尚未配置模型路径（`config.toml` 中没有 `[model].path`，或其指向的目录已失效），启动时会提示粘贴 `buffalo_l` 模型目录：校验通过后询问是否保存为默认路径——选「是」写入 `config.toml`、下次不再询问，选「否」仅本次使用、下次再问；留空回车则退出。
 
 > 进程异常退出时窗口会停下显示错误码，便于排查。启动后浏览器打开 <http://127.0.0.1:8000>。
 
