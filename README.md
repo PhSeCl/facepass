@@ -95,11 +95,29 @@ uv pip install "onnxruntime-gpu[cuda,cudnn]"
 
 ## 运行
 
-运行 `insightface` 模型前，需要你自己准备本地 `buffalo_l` 目录。项目不会再自动下载或托管模型文件。当前适配器按“`buffalo_l` 模型目录本身”加载，不是传 `models_cache` 根目录。
+运行 `insightface` 模型前，需要先在本地准备好 `buffalo_l` 模型目录。项目不托管、也不会自动下载模型权重；当前适配器按“`buffalo_l` 模型目录本身”加载（即传入直接包含 `*.onnx` 的那个目录），不是 `models_cache` 根目录。
 
-准备工作：
+### 模型下载
 
-1. 准备本地 `buffalo_l` 模型目录，例如 `F:\InsightFace\models_cache\models\buffalo_l`。
+本项目使用 InsightFace 的 `buffalo_l` 预训练模型包（人脸检测 + 关键点对齐 + ArcFace 识别一体），下载约 275 MB、解压后约 326 MB。**该模型超过 50 MB，下载方式如下（任选其一）：**
+
+**方式 A：用 insightface 自动下载（推荐）。** 装好依赖（`uv sync`）后执行一次，会自动下载并解压到 `~/.insightface/models/buffalo_l/`（Windows 为 `C:\Users\<你的用户名>\.insightface\models\buffalo_l\`）：
+
+```powershell
+uv run python -c "import insightface; insightface.app.FaceAnalysis(name='buffalo_l')"
+```
+
+**方式 B：手动下载 zip。** 从 InsightFace 官方 Release 下载并解压：
+
+- 官方直链：<https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip>
+
+解压后会得到一个 `buffalo_l/` 目录，里面应包含 5 个文件：`det_10g.onnx`、`w600k_r50.onnx`、`1k3d68.onnx`、`2d106det.onnx`、`genderage.onnx`。
+
+> 无论用哪种方式，最终都把 `config.toml` 的 `[model].path` 指向那个**直接包含上述 `.onnx` 文件的 `buffalo_l` 目录**即可。如官方源访问不畅，可自行准备国内网盘镜像（如百度网盘）后在本节补上链接。
+
+### 准备工作
+
+1. 准备本地 `buffalo_l` 模型目录（见上「[模型下载](#模型下载)」），例如 `F:\InsightFace\models_cache\models\buffalo_l` 或自动下载得到的 `~/.insightface/models/buffalo_l`。
 2. 在项目根的 `config.toml` 里写好 `[model].path`（见下文），或在启动时用 `--model-path` 显式传入。
 3. 准备注册集：将 `p01..p20` 的注册照放到 `dataset/registered/p01/` 等目录。
 
@@ -732,7 +750,7 @@ uv run python scripts/check_celeba_leakage.py --data-dir celeba_100_identities_3
 - `.venv/`
 - Python 缓存和日志
 
-当前约定是：模型目录由使用者自行下载并放在本地任意位置，再通过 `--model-path`、`FACEPASS_MODEL_PATH` 或 `config.toml` 指定。项目本身不负责下载、不依赖 Hugging Face 托管，也不会把模型目录纳入 git。
+当前约定是：模型目录由使用者自行下载（下载方式见 [模型下载](#模型下载)）并放在本地任意位置，再通过 `--model-path`、`FACEPASS_MODEL_PATH` 或 `config.toml` 指定。项目本身不负责下载、不依赖 Hugging Face 托管，也不会把模型目录纳入 git。
 
 `dataset/` 与上述模型产物不同：当前仓库已经提交了 `dataset/identities.csv`、`dataset/registered/`、`dataset/test/images/` 和 `dataset/test/annotation.json`。CelebA 子集 `celeba_100_identities_3reg_3test/`（裁剪脸，单图较小）也已纳入版本控制。
 
@@ -758,12 +776,10 @@ uv run pytest tests -q
 - `run_dev.py` 启动后端、`check_runtime.py` provider 诊断脚本。
 - 后端不导入具体模型实现，前端不导入任何 `src.*` 内部模块。
 
-## 待填项
+## 后续可改进
 
-- 给新的 HTML 前端补上“数据集评测”页，接入已就绪的 `/dataset-eval/*` 接口。
-- 持续维护 `dataset/test/annotation.json`，确保新增图片和标注始终同步提交。
-- 基于注册集内部相似度分布确定最终 unknown 阈值，不能用测试集调参。
-- 最终提交前按课程要求补充打包脚本和报告。
+- 基于注册集内部相似度分布进一步标定 unknown 阈值（当前使用默认 `0.30`，且严禁用测试集调参）。
+- 持续维护 `dataset/test/annotation.json`；规范的 `annotations.jsonl` 由 `scripts/json2jsonl.py`（及 CI）自动同步生成，无需手改。
 
 ## 小组成员
 
